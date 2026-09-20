@@ -1,4 +1,14 @@
-# Correções v1.1.1 (Render/Neon)
+# Atualização v1.2.0 (login simplificado + perfis Telegram)
+
+- Tela de login simplificada: apenas **usuário** e **senha**; o backend padrão já fica configurado no front-end.
+- Novo visual do login com animações inspiradas em roleta.
+- Lista de mesas limpa: exibe apenas **roletas disponíveis**, sem mostrar o ID técnico na interface.
+- Suporte a **múltiplos perfis Telegram por usuário**, com bot/chat/tópico/estratégias/gales/percentual independentes.
+- Envio simultâneo para canais/salas diferentes com bots diferentes, usando o mesmo coletor compartilhado.
+- Migração compatível com preferências antigas: ao entrar, uma configuração legada é convertida automaticamente em um perfil padrão quando necessário.
+- Blindagens extras: troca de mesa cancela sinais abertos, rearma perfis para giros futuros e filtra jogos não relacionados à roleta na seleção.
+
+# Correções v1.2.0 (Render/Neon)
 
 - Corrigida importação de `recentHistory` inexistente em `collector.js` (erro de inicialização ESM).
 - Corrigida sintaxe PostgreSQL `GENERATED ALWAYS AS IDENTITY PRIMARY KEY` nas quatro tabelas que usavam `AS ID` (erro PostgreSQL 42601). Criação do esquema com `CREATE ... IF NOT EXISTS` preserva dados e contas existentes.
@@ -8,13 +18,13 @@
 
 **Estado da verificação:** os testes locais de código e sintaxe não substituem a conexão real ao PostgreSQL Neon, à API de origem e ao Telegram; confira `https://SEU-SERVICO.onrender.com/api/health` e o log após o deploy. O Render **não** foi implantado por este pacote. O painel do Netlify continua sendo o mesmo; a aplicação só exibirá resultados depois que o backend for publicado, as variáveis de ambiente estiverem válidas e uma mesa for selecionada.
 
-**Publicação:** substitua os arquivos do repositório mantendo o `.git` existente, execute `git add -A; git commit -m "v1.1.1 - corrigir startup Render Neon"; git push origin main`. Netlify e Render com deploy automático habilitado puxarão `main`. Não configure novamente `ADMIN_*` nem troque `ENCRYPTION_KEY` se já tiver usuários; não apague o Neon.
+**Publicação:** substitua os arquivos do repositório mantendo o `.git` existente, execute `git add -A; git commit -m "v1.2.0 - corrigir startup Render Neon"; git push origin main`. Netlify e Render com deploy automático habilitado puxarão `main`. Não configure novamente `ADMIN_*` nem troque `ENCRYPTION_KEY` se já tiver usuários; não apague o Neon.
 
-# Roleta Analytics Web v1.1.1
+# Roleta Analytics Web v1.2.0
 
 Front-end HTML/CSS/JS para Netlify, API/monitor Node.js para Render e histórico PostgreSQL para Neon.
 
-## O que mudou nesta versão (v1.1.0)
+## O que mudou nesta versão (v1.2.0)
 
 - **Histórico circular por mesa:** quando chegam novos giros e há 2.000 registros, insere o novo e exclui o mais antigo dentro da mesma transação PostgreSQL. Não apaga nem regrava todos os 2.000 resultados.
 - **Cache compartilhado no servidor:** carrega até 2.000 resultados uma vez por mesa; o processamento das estratégias e a grade consultam o histórico em memória. Alterações manuais do administrador invalidam o cache e forçam recarga sincronizada.
@@ -66,13 +76,13 @@ No Netlify, o front-end é estático. Tentar publicar **somente** HTML no Netlif
 Extraia o ZIP na pasta Downloads; copie os arquivos para um clone atualizado do repositório `takkaiama/rouletts`. Este procedimento evita `git push --force` e preserva o histórico.
 
 ```powershell
-Expand-Archive -LiteralPath "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.1.1.zip" -DestinationPath "$env:USERPROFILE\Downloads" -Force
+Expand-Archive -LiteralPath "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.2.0.zip" -DestinationPath "$env:USERPROFILE\Downloads" -Force
 cd "$env:USERPROFILE\Downloads"
 git clone https://github.com/takkaiama/rouletts.git rouletts-publicacao
-Copy-Item "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.1.1\*" "$env:USERPROFILE\Downloads\rouletts-publicacao" -Recurse -Force
+Copy-Item "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.2.0\*" "$env:USERPROFILE\Downloads\rouletts-publicacao" -Recurse -Force
 cd "$env:USERPROFILE\Downloads\rouletts-publicacao"
 git add -A
-git commit -m "Roleta Analytics Web v1.1.1 - historico circular e grade incremental"
+git commit -m "Roleta Analytics Web v1.2.0 - historico circular e grade incremental"
 git push origin main
 ```
 

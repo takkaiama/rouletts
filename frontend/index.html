@@ -1,36 +1,168 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b1120"><meta name="referrer" content="no-referrer">
-<title>Roleta Analytics — Monitor de resultados</title><link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='47' fill='%230d1730' stroke='%234bcbab' stroke-width='6'/%3E%3Ctext x='50' y='69' font-size='57' text-anchor='middle' fill='white'%3E0%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="styles.css"></head><body>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1120">
+  <meta name="referrer" content="no-referrer">
+  <title>Roleta Analytics — Monitor de resultados</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='47' fill='%230d1730' stroke='%234bcbab' stroke-width='6'/%3E%3Ctext x='50' y='69' font-size='57' text-anchor='middle' fill='white'%3E0%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
 <div id="toast" role="status" aria-live="polite"></div>
-<section id="loginView" class="login-screen"><form id="loginForm" class="login-card">
-<div class="brand-mark">0</div><h1>Roleta Analytics</h1><p>Resultados e estratégias em tempo real</p>
-<label>Endereço do servidor (Render)<input id="serverUrl" type="url" placeholder="https://seu-servico.onrender.com" required></label>
-<label>Usuário<input id="loginName" autocomplete="username" minlength="3" required></label>
-<label>Senha<div class="password-wrap"><input id="loginPassword" type="password" autocomplete="current-password" required><button type="button" class="eye" data-eye="loginPassword" aria-label="Mostrar ou ocultar senha">◉</button></div></label>
-<button type="submit" class="primary full">Entrar no painel</button><small>Para começar, publique primeiro o servidor e crie a conta administrativa inicial.</small>
-</form></section>
+<section id="loginView" class="login-screen">
+  <div class="login-decor"><div class="roulette-wheel"></div><div class="roulette-trail"></div></div>
+  <form id="loginForm" class="login-card">
+    <div class="brand-mark">0</div>
+    <h1>Roleta Analytics</h1>
+    <p>Resultados e estratégias em tempo real</p>
+    <label>Usuário<input id="loginName" autocomplete="username" minlength="3" required></label>
+    <label>Senha
+      <div class="password-wrap">
+        <input id="loginPassword" type="password" autocomplete="current-password" required>
+        <button type="button" class="eye" data-eye="loginPassword" aria-label="Mostrar ou ocultar senha">◉</button>
+      </div>
+    </label>
+    <button type="submit" class="primary full">Entrar no painel</button>
+    <small>Pressione Enter para acessar. O endereço do servidor já fica configurado nesta versão.</small>
+  </form>
+</section>
+
 <div id="appView" class="app hidden">
-<header class="header"><div class="brand"><span class="brand-mark small">0</span><span><strong>Roleta Analytics</strong><small>MONITOR DE RESULTADOS</small></span></div>
-<div class="header-actions"><span id="livePill" class="pill">Aguardando coleta</span><span id="whoami"></span><button id="adminButton" class="secondary hidden">Administração</button><button id="logoutButton" class="secondary">Sair</button></div></header>
-<main class="page"><section class="toolbar panel"><div><label for="tableSelect">Mesa monitorada</label><select id="tableSelect"><option value="">Escolha uma roleta</option></select></div>
-<div><label for="countSelect">Resultados na grade</label><select id="countSelect"><option>50</option><option selected>100</option><option>200</option><option>500</option><option>1000</option><option>2000</option><option value="custom">Personalizado</option></select></div>
-<div id="customBox" class="hidden"><label for="customCount">Quantidade (1 a 2.000)</label><input type="number" id="customCount" min="1" max="2000" value="100"></div>
-<div class="metric"><label>Resultados armazenados</label><strong id="storedCount">—</strong></div><div class="metric"><label>Último giro</label><strong id="lastNumber">—</strong></div><div class="metric"><label>Última sincronização</label><strong id="lastSync">—</strong></div></section>
-<section class="panel section"><div class="section-header"><div><h2>Grade de resultados</h2><p>Mais recentes no topo · atualização automática · selecione um número para ver detalhes</p></div><div class="legend"><span><i class="dot red"></i> Vermelho</span><span><i class="dot black"></i> Preto</span><span><i class="dot green"></i> Zero</span></div></div>
-<div id="grade" class="grade"></div><div id="emptyGrade" class="empty">Selecione uma roleta para começar.</div><div id="spinDetails" class="details hidden"></div></section>
-<section class="panel section"><div class="section-header"><div><h2>Estratégias em tempo real</h2><p>Arraste o cabeçalho de um card para movê-lo. Use a seta para recolher ou expandir.</p></div><button id="resetCards" class="secondary">Restaurar cards</button></div><div id="analysisArea" class="analysis-area"></div><p class="footnote">Os percentuais descrevem ocorrências no histórico disponível; não são probabilidades comprovadas do próximo giro.</p></section>
-<section class="panel section"><div class="section-header"><div><h2>Telegram e validação dos sinais</h2><p>Configuração individual. Ao ativar, somente giros futuros geram novos sinais.</p></div><label class="switch-line"><input id="telegramEnabled" type="checkbox"><span>Enviar ao Telegram</span></label></div>
-<form id="telegramForm" class="telegram-form"><div class="field"><label for="botToken">Token do bot</label><div class="password-wrap"><input id="botToken" type="password" autocomplete="off" placeholder="Token não configurado"><button type="button" class="eye" data-eye="botToken" aria-label="Mostrar ou ocultar token">◉</button></div></div>
-<div class="field"><label for="chatId">Chat ID / sala</label><div class="password-wrap"><input id="chatId" type="password" autocomplete="off" placeholder="Chat ID não configurado"><button type="button" class="eye" data-eye="chatId" aria-label="Mostrar ou ocultar Chat ID">◉</button></div></div>
-<div class="field"><label for="threadId">ID do tópico (opcional)</label><input id="threadId" inputmode="numeric" placeholder="Tópico do grupo"></div>
-<div class="field"><label for="galeLimit">Quantidade máxima de gales</label><input id="galeLimit" inputmode="numeric" pattern="[0-9]+" value="1" required><small>0 = apenas SG. Aceita qualquer número inteiro não negativo.</small></div>
-<div class="field"><label for="threshold">Percentual mínimo da amostra (%)</label><input id="threshold" type="number" min="0" max="100" value="64" required></div>
-<div class="field actions"><button type="button" id="verifyTelegram" class="secondary">Verificar bot e sala</button><button type="submit" class="primary">Salvar configurações</button></div></form>
-<div class="subsection"><h3>Estratégias autorizadas para envio</h3><p>Marque apenas as estratégias que deseja receber. Cada alteração passa a valer nos próximos giros.</p><div id="flagsGrid" class="flags-grid"></div></div>
-<div class="two-col"><div><h3>Sinais recentes</h3><div id="signalsList" class="log-list empty">Nenhum sinal registrado.</div></div><div><h3>Mensagens ao Telegram</h3><div id="outboxList" class="log-list empty">Nenhuma mensagem na fila.</div></div></div></section>
-</main>
-<div id="adminModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminTitle"><div class="modal-card"><div class="section-header"><h2 id="adminTitle">Administração</h2><button id="closeAdmin" class="secondary">Fechar</button></div>
-<div class="admin-columns"><section><h3>Contas de acesso</h3><form id="createUserForm" class="admin-form"><input id="newUsername" placeholder="Novo usuário" minlength="3" required><input id="newPassword" type="password" minlength="12" placeholder="Senha (mínimo 12)" required><select id="newRole"><option value="user">Usuário</option><option value="admin">Administrador</option></select><button type="submit" class="primary">Adicionar conta</button></form><div id="usersList" class="log-list"></div></section>
-<section><h3>Editar a grade (mesa selecionada)</h3><form id="addSpinForm" class="admin-form"><input id="manualNumber" type="number" min="0" max="36" placeholder="Número 0–36" required><button type="submit" class="secondary">Inserir registro manual</button></form><p class="footnote">Clique em um resultado da grade para editar ou excluir. Edições manuais não disparam sinais antigos.</p><h3>Auditoria</h3><div id="auditList" class="log-list"></div></section></div></div></div>
-<script type="module" src="app.js"></script></div></body></html>
+  <header class="header">
+    <div class="brand">
+      <span class="brand-mark small">0</span>
+      <span><strong>Roleta Analytics</strong><small>MONITOR DE RESULTADOS</small></span>
+    </div>
+    <div class="header-actions">
+      <span id="livePill" class="pill">Aguardando coleta</span>
+      <span id="whoami"></span>
+      <button id="adminButton" class="secondary hidden">Administração</button>
+      <button id="logoutButton" class="secondary">Sair</button>
+    </div>
+  </header>
+  <main class="page">
+    <section class="toolbar panel">
+      <div>
+        <label for="tableSelect">Mesa monitorada</label>
+        <select id="tableSelect"><option value="">Escolha uma roleta</option></select>
+      </div>
+      <div>
+        <label for="countSelect">Resultados na grade</label>
+        <select id="countSelect"><option>50</option><option selected>100</option><option>200</option><option>500</option><option>1000</option><option>2000</option><option value="custom">Personalizado</option></select>
+      </div>
+      <div id="customBox" class="hidden">
+        <label for="customCount">Quantidade (1 a 2.000)</label>
+        <input type="number" id="customCount" min="1" max="2000" value="100">
+      </div>
+      <div class="metric"><label>Resultados armazenados</label><strong id="storedCount">—</strong></div>
+      <div class="metric"><label>Último giro</label><strong id="lastNumber">—</strong></div>
+      <div class="metric"><label>Última sincronização</label><strong id="lastSync">—</strong></div>
+    </section>
+
+    <section class="panel section">
+      <div class="section-header">
+        <div>
+          <h2>Grade de resultados</h2>
+          <p>Mais recentes no topo · atualização automática · selecione um número para ver detalhes</p>
+        </div>
+        <div class="legend"><span><i class="dot red"></i> Vermelho</span><span><i class="dot black"></i> Preto</span><span><i class="dot green"></i> Zero</span></div>
+      </div>
+      <div id="grade" class="grade"></div>
+      <div id="emptyGrade" class="empty">Selecione uma roleta para começar.</div>
+      <div id="spinDetails" class="details hidden"></div>
+    </section>
+
+    <section class="panel section">
+      <div class="section-header">
+        <div>
+          <h2>Estratégias em tempo real</h2>
+          <p>Arraste o cabeçalho de um card para movê-lo. Use a seta para recolher ou expandir.</p>
+        </div>
+        <button id="resetCards" class="secondary">Restaurar cards</button>
+      </div>
+      <div id="analysisArea" class="analysis-area"></div>
+      <p class="footnote">Os percentuais descrevem ocorrências no histórico disponível; não são probabilidades comprovadas do próximo giro.</p>
+    </section>
+
+    <section class="panel section">
+      <div class="section-header">
+        <div>
+          <h2>Telegram e perfis de envio</h2>
+          <p>Crie vários perfis para usar bots e salas diferentes ao mesmo tempo. Cada perfil pode ter estratégias próprias.</p>
+        </div>
+      </div>
+      <div class="telegram-layout">
+        <aside class="profiles-column">
+          <div class="subsection compact-top">
+            <h3>Perfis salvos</h3>
+            <div class="profile-toolbar">
+              <button type="button" id="newProfileBtn" class="secondary">Novo perfil</button>
+              <button type="button" id="deleteProfileBtn" class="danger">Excluir</button>
+            </div>
+            <div id="profilesList" class="profiles-list"></div>
+          </div>
+        </aside>
+        <div>
+          <form id="telegramForm" class="telegram-form">
+            <div class="field full-row">
+              <label for="profileLabel">Nome do perfil</label>
+              <input id="profileLabel" maxlength="50" placeholder="Ex.: Sala principal, Canal cores, Bot secundário" required>
+            </div>
+            <div class="field switch-field">
+              <label class="switch-line"><input id="telegramEnabled" type="checkbox"><span>Ativar envio neste perfil</span></label>
+            </div>
+            <div class="field"><label for="botToken">Token do bot</label><div class="password-wrap"><input id="botToken" type="password" autocomplete="off" placeholder="Token não configurado"><button type="button" class="eye" data-eye="botToken" aria-label="Mostrar ou ocultar token">◉</button></div></div>
+            <div class="field"><label for="chatId">Chat ID / sala</label><div class="password-wrap"><input id="chatId" type="password" autocomplete="off" placeholder="Chat ID não configurado"><button type="button" class="eye" data-eye="chatId" aria-label="Mostrar ou ocultar Chat ID">◉</button></div></div>
+            <div class="field"><label for="threadId">ID do tópico (opcional)</label><input id="threadId" inputmode="numeric" placeholder="Tópico do grupo"></div>
+            <div class="field"><label for="galeLimit">Quantidade máxima de gales</label><input id="galeLimit" inputmode="numeric" pattern="[0-9]+" value="1" required><small>0 = apenas SG. Aceita qualquer número inteiro não negativo.</small></div>
+            <div class="field"><label for="threshold">Percentual mínimo da amostra (%)</label><input id="threshold" type="number" min="0" max="100" value="64" required></div>
+            <div class="field actions full-row"><button type="button" id="verifyTelegram" class="secondary">Verificar bot e sala</button><button type="submit" class="primary">Salvar perfil</button></div>
+          </form>
+          <div class="subsection">
+            <h3>Estratégias autorizadas para o perfil selecionado</h3>
+            <p>Marque apenas as estratégias que deseja receber neste perfil.</p>
+            <div id="flagsGrid" class="flags-grid"></div>
+          </div>
+          <div class="two-col">
+            <div><h3>Sinais recentes</h3><div id="signalsList" class="log-list empty">Nenhum sinal registrado.</div></div>
+            <div><h3>Mensagens ao Telegram</h3><div id="outboxList" class="log-list empty">Nenhuma mensagem na fila.</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="adminModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+    <div class="modal-card">
+      <div class="section-header"><h2 id="adminTitle">Administração</h2><button id="closeAdmin" class="secondary">Fechar</button></div>
+      <div class="admin-columns">
+        <section>
+          <h3>Contas de acesso</h3>
+          <form id="createUserForm" class="admin-form">
+            <input id="newUsername" placeholder="Novo usuário" minlength="3" required>
+            <input id="newPassword" type="password" minlength="12" placeholder="Senha (mínimo 12)" required>
+            <select id="newRole"><option value="user">Usuário</option><option value="admin">Administrador</option></select>
+            <button type="submit" class="primary">Adicionar conta</button>
+          </form>
+          <div id="usersList" class="log-list"></div>
+        </section>
+        <section>
+          <h3>Editar a grade (mesa selecionada)</h3>
+          <form id="addSpinForm" class="admin-form">
+            <input id="manualNumber" type="number" min="0" max="36" placeholder="Número 0–36" required>
+            <button type="submit" class="secondary">Inserir registro manual</button>
+          </form>
+          <p class="footnote">Clique em um resultado da grade para editar ou excluir. Edições manuais não disparam sinais antigos.</p>
+          <h3>Auditoria</h3>
+          <div id="auditList" class="log-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</div>
+</body>
+</html>
