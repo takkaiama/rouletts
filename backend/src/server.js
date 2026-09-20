@@ -87,6 +87,65 @@ async function ensureLegacyProfile(userId){
   ]);
 }
 
+function blankProfileStats(){
+  return {total:0,open:0,closed:0,greens:0,reds:0,cancelled:0,accuracy:0,sg:0,g1:0,g2:0,g3:0,g4Plus:0,currentGreenStreak:0,currentRedStreak:0,bestGreenStreak:0,bestRedStreak:0};
+}
+function hydrateStats(map,key){
+  if(!map[key]) map[key]=blankProfileStats();
+  return map[key];
+}
+async function getProfileStats(userId,tableId){
+  const stats={all:blankProfileStats()};
+  if(!tableId) return stats;
+  const {rows}=await pool.query(`SELECT id::text AS id,label FROM telegram_profiles WHERE user_id=$1 ORDER BY id`,[userId]);
+  for(const row of rows) stats[row.id]={...blankProfileStats(),label:row.label};
+  const {rows:signals}=await pool.query(`SELECT id,COALESCE(profile_id::text,'') AS profile_id,status,attempts
+    FROM signals WHERE user_id=$1 AND table_id=$2 ORDER BY id ASC`,[userId,tableId]);
+  const streakState=new Map();
+  const apply=(bucket,row)=>{
+    bucket.total++;
+    if(row.status==='open'){bucket.open++;return;}
+    if(row.status==='cancelled'){bucket.cancelled++;return;}
+    if(row.status!=='green'&&row.status!=='red') return;
+    bucket.closed++;
+    if(row.status==='green'){
+      bucket.greens++;
+      const tries=Number(row.attempts||0);
+      if(tries<=0) bucket.sg++;
+      else if(tries===1) bucket.g1++;
+      else if(tries===2) bucket.g2++;
+      else if(tries===3) bucket.g3++;
+      else bucket.g4Plus++;
+    }else bucket.reds++;
+  };
+  for(const row of signals){
+    const keys=['all'];
+    if(row.profile_id && stats[row.profile_id]) keys.push(row.profile_id);
+    for(const key of keys){
+      const bucket=hydrateStats(stats,key);
+      apply(bucket,row);
+      if(row.status!=='green'&&row.status!=='red') continue;
+      const prev=streakState.get(key)||{type:'',value:0,bestGreen:0,bestRed:0};
+      const type=row.status;
+      const next={...prev};
+      if(prev.type===type) next.value=prev.value+1;
+      else {next.type=type;next.value=1;}
+      if(type==='green') next.bestGreen=Math.max(prev.bestGreen||0,next.value);
+      if(type==='red') next.bestRed=Math.max(prev.bestRed||0,next.value);
+      streakState.set(key,next);
+    }
+  }
+  for(const [key,bucket] of Object.entries(stats)){
+    bucket.accuracy=bucket.closed?Number(((bucket.greens/bucket.closed)*100).toFixed(1)):0;
+    const streak=streakState.get(key)||{type:'',value:0,bestGreen:0,bestRed:0};
+    bucket.currentGreenStreak=streak.type==='green'?streak.value:0;
+    bucket.currentRedStreak=streak.type==='red'?streak.value:0;
+    bucket.bestGreenStreak=streak.bestGreen||0;
+    bucket.bestRedStreak=streak.bestRed||0;
+  }
+  return stats;
+}
+
 app.get('/api/health',asyncRoute(async(req,res)=>{
   try{
     await pool.query('SELECT 1');
@@ -140,7 +199,7 @@ app.get('/api/state',asyncRoute(async(req,res)=>{
   const profiles=(await listProfiles(req.user.id)).map(publicProfile);
   const limit=pref.display_limit;
   const table=pref.table_id;
-  let spins=[],analyses={},signals=[],outbox=[],tableInfo=null,totalStored=0,historyEpoch=null,latestSpinId='0';
+  let spins=[],analyses={},signals=[],outbox=[],tableInfo=null,totalStored=0,historyEpoch=null,latestSpinId='0',profileStats={all:blankProfileStats()};
   if(table){
     const {rows:t}=await pool.query('SELECT id,name,last_seen_at,gap_count::text FROM tables WHERE id=$1',[table]);
     tableInfo=t[0]?publicTable(t[0]):null;
@@ -159,8 +218,9 @@ app.get('/api/state',asyncRoute(async(req,res)=>{
       FROM outbox o LEFT JOIN telegram_profiles tp ON tp.id=o.profile_id
       WHERE o.user_id=$1 AND o.table_id=$2 ORDER BY o.id DESC LIMIT 50`,[req.user.id,table]);
     outbox=o;
+    profileStats=await getProfileStats(req.user.id,table);
   }
-  res.json({user:req.user,preferences:publicPref(pref),profiles,table:tableInfo,collector:live,totalStored,spins,analyses,signals,outbox,historyEpoch,latestSpinId});
+  res.json({user:req.user,preferences:publicPref(pref),profiles,table:tableInfo,collector:live,totalStored,spins,analyses,signals,outbox,historyEpoch,latestSpinId,profileStats});
 }));
 
 app.get('/api/live',asyncRoute(async(req,res)=>{
@@ -269,11 +329,13 @@ app.patch('/api/telegram/profiles/:id',asyncRoute(async(req,res)=>{
 }));
 
 app.delete('/api/telegram/profiles/:id',asyncRoute(async(req,res)=>{
-  const {rows}=await pool.query('DELETE FROM telegram_profiles WHERE user_id=$1 AND id=$2 RETURNING id,label',[req.user.id,req.params.id]);
-  if(!rows.length) return res.sendStatus(404);
-  await pool.query('UPDATE outbox SET status=\'cancelled\' WHERE user_id=$1 AND profile_id=$2 AND status IN (\'queued\',\'processing\')',[req.user.id,req.params.id]);
-  await pool.query('UPDATE signals SET status=\'cancelled\',closed_at=now() WHERE user_id=$1 AND profile_id=$2 AND status=\'open\'',[req.user.id,req.params.id]);
-  await pool.query('INSERT INTO audit_log(actor_id,action,detail) VALUES($1,$2,$3)',[req.user.id,'telegram.profile.delete',JSON.stringify(rows[0])]);
+  const existing=await pool.query('SELECT id,label FROM telegram_profiles WHERE user_id=$1 AND id=$2',[req.user.id,req.params.id]);
+  if(!existing.rows.length) return res.sendStatus(404);
+  await pool.query('UPDATE telegram_profiles SET send_enabled=false,updated_at=now() WHERE user_id=$1 AND id=$2',[req.user.id,req.params.id]);
+  await pool.query("UPDATE outbox SET status='cancelled' WHERE user_id=$1 AND profile_id=$2 AND status IN ('queued','processing')",[req.user.id,req.params.id]);
+  await pool.query("UPDATE signals SET status='cancelled',closed_at=now() WHERE user_id=$1 AND profile_id=$2 AND status='open'",[req.user.id,req.params.id]);
+  await pool.query('DELETE FROM telegram_profiles WHERE user_id=$1 AND id=$2',[req.user.id,req.params.id]);
+  await pool.query('INSERT INTO audit_log(actor_id,action,detail) VALUES($1,$2,$3)',[req.user.id,'telegram.profile.delete',JSON.stringify(existing.rows[0])]);
   res.json({ok:true,profiles:(await listProfiles(req.user.id)).map(publicProfile)});
 }));
 

@@ -25,7 +25,7 @@
       </div>
     </label>
     <button type="submit" class="primary full">Entrar no painel</button>
-    <small>Pressione Enter para acessar. O endereço do servidor já fica configurado nesta versão.</small>
+    <small>Pressione Enter para acessar.</small>
   </form>
 </section>
 
@@ -65,7 +65,7 @@
       <div class="section-header">
         <div>
           <h2>Grade de resultados</h2>
-          <p>Mais recentes no topo · atualização automática · selecione um número para ver detalhes</p>
+          <p>Mais recentes no topo · clique em um número para destacar os iguais</p>
         </div>
         <div class="legend"><span><i class="dot red"></i> Vermelho</span><span><i class="dot black"></i> Preto</span><span><i class="dot green"></i> Zero</span></div>
       </div>
@@ -78,19 +78,19 @@
       <div class="section-header">
         <div>
           <h2>Estratégias em tempo real</h2>
-          <p>Arraste o cabeçalho de um card para movê-lo. Use a seta para recolher ou expandir.</p>
+          <p>Cards arrastáveis e atualizados em tempo real.</p>
         </div>
         <button id="resetCards" class="secondary">Restaurar cards</button>
       </div>
       <div id="analysisArea" class="analysis-area"></div>
-      <p class="footnote">Os percentuais descrevem ocorrências no histórico disponível; não são probabilidades comprovadas do próximo giro.</p>
+      
     </section>
 
     <section class="panel section">
       <div class="section-header">
         <div>
           <h2>Telegram e perfis de envio</h2>
-          <p>Crie vários perfis para usar bots e salas diferentes ao mesmo tempo. Cada perfil pode ter estratégias próprias.</p>
+          <p>Perfis independentes para bots, salas e estratégias.</p>
         </div>
       </div>
       <div class="telegram-layout">
@@ -122,10 +122,10 @@
           </form>
           <div class="subsection">
             <h3>Estratégias autorizadas para o perfil selecionado</h3>
-            <p>Marque apenas as estratégias que deseja receber neste perfil.</p>
+            
             <div id="flagsGrid" class="flags-grid"></div>
           </div>
-          <div class="two-col">
+          <div id="profileStats" class="stats-summary"></div><div class="two-col">
             <div><h3>Sinais recentes</h3><div id="signalsList" class="log-list empty">Nenhum sinal registrado.</div></div>
             <div><h3>Mensagens ao Telegram</h3><div id="outboxList" class="log-list empty">Nenhuma mensagem na fila.</div></div>
           </div>
@@ -149,13 +149,8 @@
           <div id="usersList" class="log-list"></div>
         </section>
         <section>
-          <h3>Editar a grade (mesa selecionada)</h3>
-          <form id="addSpinForm" class="admin-form">
-            <input id="manualNumber" type="number" min="0" max="36" placeholder="Número 0–36" required>
-            <button type="submit" class="secondary">Inserir registro manual</button>
-          </form>
-          <p class="footnote">Clique em um resultado da grade para editar ou excluir. Edições manuais não disparam sinais antigos.</p>
           <h3>Auditoria</h3>
+          <p class="footnote">Alterações críticas e ações administrativas recentes.</p>
           <div id="auditList" class="log-list"></div>
         </section>
       </div>
