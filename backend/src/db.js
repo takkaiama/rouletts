@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS preferences (
  armed_after_id bigint NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS signals (
- id bigint GENERATED ALWAYS AS ID PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  table_id text NOT NULL REFERENCES tables(id), strategy_key text NOT NULL,
  target text NOT NULL, kind text NOT NULL, start_spin_id bigint NOT NULL,
  last_processed_id bigint NOT NULL, attempts text NOT NULL DEFAULT '0', gale_limit text NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS signals (
 CREATE UNIQUE INDEX IF NOT EXISTS signals_one_open ON signals(user_id,table_id,strategy_key) WHERE status='open';
 CREATE INDEX IF NOT EXISTS signals_user_recent ON signals(user_id,id DESC);
 CREATE TABLE IF NOT EXISTS outbox (
- id bigint GENERATED ALWAYS AS ID PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  table_id text NOT NULL REFERENCES tables(id), strategy_key text NOT NULL,
  spin_id bigint NOT NULL, signal_id bigint REFERENCES signals(id) ON DELETE SET NULL,
  body text NOT NULL, dedupe_key text NOT NULL UNIQUE,
@@ -52,15 +52,15 @@ CREATE TABLE IF NOT EXISTS outbox (
 );
 CREATE INDEX IF NOT EXISTS outbox_delivery ON outbox(status,run_after,id);
 CREATE TABLE IF NOT EXISTS audit_log (
- id bigint GENERATED ALWAYS AS ID PRIMARY KEY, actor_id uuid REFERENCES users(id) ON DELETE SET NULL,
+ id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, actor_id uuid REFERENCES users(id) ON DELETE SET NULL,
  action text NOT NULL, detail jsonb NOT NULL DEFAULT '{}'::jsonb,
  created_at timestamptz NOT NULL DEFAULT now()
 );
   `);
 }
-export async function trimSpins(tableId){
+export async function trimSpins(tableId,client=pool){
   // Limpeza de compatibilidade após inserts manuais ou migração de bancos antigos.
-  await pool.query(`DELETE FROM spins WHERE table_id=$1 AND id IN
+  await client.query(`DELETE FROM spins WHERE table_id=$1 AND id IN
     (SELECT id FROM spins WHERE table_id=$1 ORDER BY id DESC OFFSET 2000)`,[tableId]);
 }
 

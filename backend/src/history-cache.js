@@ -1,4 +1,4 @@
-// Cache compartilhado por mesa: a grade não relê os 2000 resultados a cada atualização.
+// Um cache por mesa. Leituras concluídas após invalidação nunca ressuscitam dados antigos.
 import {pool} from './db.js';
 import {analyze} from './strategies.js';
 import {HISTORY_LIMIT} from './history-ring.js';
@@ -8,17 +8,25 @@ const pending=new Map();
 const generation=new Map();
 let epoch=0;
 export async function getHistory(tableId){
-  if(histories.has(tableId))return histories.get(tableId);
-  if(pending.has(tableId))return pending.get(tableId);
-  const generationAtStart=generation.get(tableId)||0;
-  const promise=(async()=>{
-    const {rows}=await pool.query('SELECT id::text,number,source,created_at FROM spins WHERE table_id=$1 ORDER BY id DESC LIMIT $2',[tableId,HISTORY_LIMIT]);
-    const history={rows:rows.reverse(),epoch:++epoch,analyses:null};
-    if((generation.get(tableId)||0)===generationAtStart)histories.set(tableId,history);
-    return history;
-  })();
-  pending.set(tableId,promise);
-  try{return await promise;}finally{if(pending.get(tableId)===promise)pending.delete(tableId);}
+  while(true){
+    const cached=histories.get(tableId);
+    if(cached)return cached;
+    const wanted=generation.get(tableId)||0;
+    let current=pending.get(tableId);
+    if(!current || current.generation!==wanted){
+      const promise=pool.query('SELECT id::text,number,source,created_at FROM spins WHERE table_id=$1 ORDER BY id DESC LIMIT $2',[tableId,HISTORY_LIMIT])
+        .then(({rows})=>{
+          const history={rows:rows.reverse(),epoch:++epoch,analyses:null};
+          if((generation.get(tableId)||0)===wanted) histories.set(tableId,history);
+          return history;
+        });
+      current={generation:wanted,promise};
+      pending.set(tableId,current);
+      promise.finally(()=>{if(pending.get(tableId)===current)pending.delete(tableId);}).catch(()=>{});
+    }
+    const loaded=await current.promise;
+    if((generation.get(tableId)||0)===wanted)return histories.get(tableId)||loaded;
+  }
 }
 export function invalidateHistory(tableId){
   generation.set(tableId,(generation.get(tableId)||0)+1);

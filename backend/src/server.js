@@ -25,7 +25,15 @@ app.use((req,res,next)=>{
 });
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
 const loginAttempts=new Map();
-app.get('/api/health',(req,res)=>res.json({ok:true,collector:live}));
+app.get('/api/health',asyncRoute(async(req,res)=>{
+  try {
+    await pool.query('SELECT 1');
+    res.json({ok:true,database:'connected',collector:live});
+  } catch(error){
+    console.error('[health] PostgreSQL indisponível:',error.code||error.message);
+    res.status(503).json({ok:false,database:'unavailable',collector:live});
+  }
+}));
 app.post('/api/login',asyncRoute(async(req,res)=>{
   const username=String(req.body?.username||'').trim(),password=String(req.body?.password||'');
   if(username.length>40||password.length>200)return res.status(400).json({error:'Credenciais inválidas'});
@@ -184,8 +192,17 @@ app.post('/api/admin/spins',requireAdmin,asyncRoute(async(req,res)=>{
   const {tableId,number}=req.body||{};
   if(!Number.isInteger(number)||number<0||number>36)return res.status(400).json({error:'Número deve estar entre 0 e 36'});
   const exists=await pool.query('SELECT 1 FROM tables WHERE id=$1',[tableId]);if(!exists.rowCount)return res.sendStatus(404);
-  const {rows}=await pool.query("INSERT INTO spins(table_id,number,source) VALUES($1,$2,'manual') RETURNING id::text,number",[tableId,number]);
-  await trimSpins(tableId);
+  const client=await pool.connect();
+  let rows;
+  try {
+    await client.query('BEGIN');
+    ({rows}=await client.query("INSERT INTO spins(table_id,number,source) VALUES($1,$2,'manual') RETURNING id::text,number",[tableId,number]));
+    await trimSpins(tableId,client);
+    await client.query('COMMIT');
+  } catch(error) {
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+  } finally { client.release(); }
   invalidateHistory(tableId);
   await pool.query('INSERT INTO audit_log(actor_id,action,detail) VALUES($1,$2,$3)',[req.user.id,'spin.create',JSON.stringify({...rows[0],tableId})]);res.status(201).json(rows[0]);
 }));
@@ -211,5 +228,13 @@ app.use((err,req,res,next)=>{
   if(!res.headersSent)res.status(500).json({error:'Erro interno. Consulte os logs do servidor.'});
 });
 const port=Number(process.env.PORT)||3000;
-await initDb();await seedAdmin();
+try {
+  await initDb();
+  await seedAdmin();
+} catch (error) {
+  console.error('[inicializacao] Verifique o esquema PostgreSQL e as variáveis obrigatórias:', error.code||error.message);
+  process.exitCode=1;
+  await pool.end();
+  throw error;
+}
 app.listen(port,()=>{console.log(`Servidor pronto na porta ${port}`);startWorkers();});

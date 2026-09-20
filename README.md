@@ -1,4 +1,16 @@
-# Roleta Analytics Web v1.1.0
+# Correções v1.1.1 (Render/Neon)
+
+- Corrigida importação de `recentHistory` inexistente em `collector.js` (erro de inicialização ESM).
+- Corrigida sintaxe PostgreSQL `GENERATED ALWAYS AS IDENTITY PRIMARY KEY` nas quatro tabelas que usavam `AS ID` (erro PostgreSQL 42601). Criação do esquema com `CREATE ... IF NOT EXISTS` preserva dados e contas existentes.
+- Inserção administrativa e limite de 2.000 resultados agora usam uma transação, com invalidação de cache após commit.
+- Corrigida leitura de histórico em andamento após invalidação administrativa para evitar reapresentar cache obsoleto.
+- Acrescentados testes de regressão do esquema e importações, executados automaticamente antes do servidor iniciar; ver `backend/test/startup-regression.test.js`.
+
+**Estado da verificação:** os testes locais de código e sintaxe não substituem a conexão real ao PostgreSQL Neon, à API de origem e ao Telegram; confira `https://SEU-SERVICO.onrender.com/api/health` e o log após o deploy. O Render **não** foi implantado por este pacote. O painel do Netlify continua sendo o mesmo; a aplicação só exibirá resultados depois que o backend for publicado, as variáveis de ambiente estiverem válidas e uma mesa for selecionada.
+
+**Publicação:** substitua os arquivos do repositório mantendo o `.git` existente, execute `git add -A; git commit -m "v1.1.1 - corrigir startup Render Neon"; git push origin main`. Netlify e Render com deploy automático habilitado puxarão `main`. Não configure novamente `ADMIN_*` nem troque `ENCRYPTION_KEY` se já tiver usuários; não apague o Neon.
+
+# Roleta Analytics Web v1.1.1
 
 Front-end HTML/CSS/JS para Netlify, API/monitor Node.js para Render e histórico PostgreSQL para Neon.
 
@@ -54,19 +66,19 @@ No Netlify, o front-end é estático. Tentar publicar **somente** HTML no Netlif
 Extraia o ZIP na pasta Downloads; copie os arquivos para um clone atualizado do repositório `takkaiama/rouletts`. Este procedimento evita `git push --force` e preserva o histórico.
 
 ```powershell
-Expand-Archive -LiteralPath "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.1.0.zip" -DestinationPath "$env:USERPROFILE\Downloads" -Force
+Expand-Archive -LiteralPath "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.1.1.zip" -DestinationPath "$env:USERPROFILE\Downloads" -Force
 cd "$env:USERPROFILE\Downloads"
 git clone https://github.com/takkaiama/rouletts.git rouletts-publicacao
-Copy-Item "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.1.0\*" "$env:USERPROFILE\Downloads\rouletts-publicacao" -Recurse -Force
+Copy-Item "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.1.1\*" "$env:USERPROFILE\Downloads\rouletts-publicacao" -Recurse -Force
 cd "$env:USERPROFILE\Downloads\rouletts-publicacao"
 git add -A
-git commit -m "Roleta Analytics Web v1.1.0 - historico circular e grade incremental"
+git commit -m "Roleta Analytics Web v1.1.1 - historico circular e grade incremental"
 git push origin main
 ```
 
 Se a pasta `rouletts-publicacao` já existir, em vez de executar `git clone`, faça `cd` nela e rode `git pull --ff-only origin main` antes do `Copy-Item`.
 
-O Netlify atualizará o front-end após o push se estiver conectado a `takkaiama/rouletts`. O Render também precisará estar conectado ao mesmo repositório e com deploy automático habilitado (ou acione um deploy manual). No Render, configure Root Directory `backend`, Build Command `npm install`, Start Command `npm start`. Não publique `.env` ou o código Python original com token antigo no GitHub.
+O Netlify atualizará o front-end após o push se estiver conectado a `takkaiama/rouletts`. O Render também precisará estar conectado ao mesmo repositório e com deploy automático habilitado (ou acione um deploy manual). No Render, configure Root Directory `backend`, Build Command `npm install && npm test`, Start Command `npm start`. Não publique `.env` ou o código Python original com token antigo no GitHub.
 
 ## Executar localmente
 

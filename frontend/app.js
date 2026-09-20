@@ -90,7 +90,7 @@ async function refresh(){if(!state.token||state.busy||state.dialog)return;state.
   $('whoami').textContent=`${data.user.username} · ${data.user.role==='admin'?'Admin':'Usuário'}`;$('adminButton').classList.toggle('hidden',data.user.role!=='admin');
   if(wasTable!==data.preferences.tableId||(!$('tableSelect').value&&$('tableSelect').options.length<=1))await fetchTables();$('tableSelect').value=data.preferences.tableId||'';
   const count=data.preferences.displayLimit;$('countSelect').value=[50,100,200,500,1000,2000].includes(count)?String(count):'custom';$('customBox').classList.toggle('hidden',$('countSelect').value!=='custom');$('customCount').value=count;
-  if(document.activeElement!==$('botToken')&&document.activeElement!==$('chatId')&&document.activeElement!==$('galeLimit')&&document.activeElement!==$('threshold'))setTelegramForm(data.preferences);
+  if(document.activeElement!==$('botToken')&&document.activeElement!==$('chatId')&&document.activeElement!==$('threadId')&&document.activeElement!==$('galeLimit')&&document.activeElement!==$('threshold'))setTelegramForm(data.preferences);
   renderGrid();renderCards();renderFlags();renderLogs();
 }catch(e){if(state.token)note(e.message,true);}finally{state.busy=false;}}
 async function liveRefresh(){
