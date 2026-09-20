@@ -1,11 +1,22 @@
-# Roleta Analytics Web v1.0.0
+# Roleta Analytics Web v1.1.0
 
 Front-end HTML/CSS/JS para Netlify, API/monitor Node.js para Render e histórico PostgreSQL para Neon.
 
+## O que mudou nesta versão (v1.1.0)
+
+- **Histórico circular por mesa:** quando chegam novos giros e há 2.000 registros, insere o novo e exclui o mais antigo dentro da mesma transação PostgreSQL. Não apaga nem regrava todos os 2.000 resultados.
+- **Cache compartilhado no servidor:** carrega até 2.000 resultados uma vez por mesa; o processamento das estratégias e a grade consultam o histórico em memória. Alterações manuais do administrador invalidam o cache e forçam recarga sincronizada.
+- **Grade incremental:** `/api/live` informa apenas os novos giros desde o último ID visto, sem reler a tabela de giros do Neon em cada atualização. Alterações manuais e reinícios do servidor fazem o navegador sincronizar a grade inteira automaticamente. Os detalhes de sinais, fila e preferências são atualizados a cada 30 segundos.
+- **Menos consultas de coleta:** mesas disponíveis são descobertas uma vez por processo, lista de mesas acompanhadas é atualizada a cada 15 segundos, e a foto da janela da API é gravada somente quando a janela muda. O monitor continua consultando a origem a cada ~2,5 s (configurável).
+- **Telegram com espera quando vazio:** a fila não consulta o Neon a cada 1,4 segundo quando não há mensagens; um novo sinal reativa a consulta, e mensagens pendentes de uma interrupção são recuperadas no reinício.
+- **Atualização sem perder contas:** não apague o banco Neon, não altere a chave de criptografia e não substitua as variáveis `ADMIN_*` para tentar recriar contas existentes. O esquema atual é compatível com a v1.0.0.
+
+**Limitações:** manter 2.000 resultados limita o armazenamento dos giros, mas as tabelas de usuários, sinais, mensagens e auditoria também consomem espaço. A API original pode não diferenciar duas janelas idênticas após giros repetidos nem recuperar uma interrupção maior que a janela de cinco posições. O histórico exibido reflete os giros efetivamente identificados; não constitui garantia de completude ou latência da fonte. Esta versão ainda exige um processo Render que não hiberne e o Neon para persistência. Não inclui integração de apostas.
+
 ## Funcionalidades
 
-- Grade atualizada a cada 2,5 segundos, mais recentes no topo, 50/100/200/500/1.000/2.000 ou quantidade de 1 a 2.000.
-- Coleta em servidor independente das abas abertas. Mantém **até 2.000 resultados por mesa** no PostgreSQL e uma fotografia das últimas cinco posições da API para detectar novos giros.
+- Grade atualizada a cada 2,5 segundos (requisições incrementais), mais recentes no topo, 50/100/200/500/1.000/2.000 ou quantidade de 1 a 2.000.
+- Coleta em servidor independente das abas abertas. Mantém **até 2.000 resultados por mesa** no PostgreSQL, retirando o mais antigo na mesma transação da inserção de cada giro novo; usa uma fotografia das últimas cinco posições da API para detectar giros.
 - 11 cards móveis/recolhíveis: padrões de 1–4 números, 2–4 cores, 2–4 colunas e consenso numérico. Cards são individuais à aba do navegador.
 - Contas com autenticação no backend, separação admin/usuário; admin cria/edita/remove contas e insere/corrige/apaga giros, com registro de auditoria. Edição manual não envia sinal retroativo.
 - Cada conta escolhe mesa, estratégias a notificar, token, chat ID, tópico opcional, percentual de amostra e número de gales. Apenas sinais **criados depois de habilitar** a flag são enviados. Uma fila sequencial evita mensagens simultâneas.
@@ -25,7 +36,7 @@ Crie um projeto PostgreSQL no Neon e copie a connection string `postgresql://...
 3. Configure `Root Directory` = `backend`, `Build Command` = `npm install` e `Start Command` = `npm start`.
 4. Configure no painel do Render as variáveis de ambiente do `backend/.env.example`: `DATABASE_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD` com pelo menos 12 caracteres, `ENCRYPTION_KEY` com 64 hexadecimais e `FRONTEND_ORIGIN` com sua URL do Netlify (`https://...netlify.app`). Não copie o `.env` real para o GitHub.
 5. Para gerar a chave, rode no PowerShell `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` e cole o resultado no Render.
-6. Ao iniciar, abra `https://SEU-BACKEND.onrender.com/api/health`: deve exibir `ok: true` (e o status da API de origem). O primeiro admin é criado pelas variáveis de ambiente **apenas em um banco vazio**.
+6. Ao iniciar, abra `https://SEU-BACKEND.onrender.com/api/health`: deve exibir `ok: true` (e o status da API de origem). O primeiro admin é criado pelas variáveis de ambiente **apenas em um banco vazio**. Para atualizar a versão anterior, reutilize o MESMO DATABASE_URL e a MESMA ENCRYPTION_KEY: trocar a chave impede recuperar os tokens de Telegram já criptografados.
 7. Para coleta realmente contínua, use uma instância Render que **não hiberne** e mantenha **uma única instância** deste worker. Planos/instâncias que adormecem interrompem a coleta e os envios. Caso a infraestrutura faça deploys/reinícios, poderá existir uma lacuna nos dados.
 
 ## 3 — Publicar o site no Netlify
@@ -38,28 +49,24 @@ Crie um projeto PostgreSQL no Neon e copie a connection string `postgresql://...
 
 No Netlify, o front-end é estático. Tentar publicar **somente** HTML no Netlify não manteria o coletor funcionando depois de fechar o navegador nem protegeria o token do Telegram e as contas.
 
-## Publicar pelo Windows PowerShell
+## Atualizar o GitHub existente pelo Windows PowerShell (sem forçar histórico)
 
-Extraia o ZIP na pasta `Downloads`, copie apenas o caminho real dessa pasta e substitua `SEU-USUARIO/SEU-REPOSITORIO`:
-
-```powershell
-cd "C:\Users\Micro\Downloads\roleta-analytics-web-v1.0.0"
-git init
-git add .
-git commit -m "Roleta Analytics Web v1.0.0"
-git branch -M main
-git remote add origin https://github.com/SEU-USUARIO/SEU-REPOSITORIO.git
-git push -u origin main
-```
-
-Em atualizações posteriores:
+Extraia o ZIP na pasta Downloads; copie os arquivos para um clone atualizado do repositório `takkaiama/rouletts`. Este procedimento evita `git push --force` e preserva o histórico.
 
 ```powershell
-cd "C:\Users\Micro\Downloads\roleta-analytics-web-v1.0.0"
-git add .
-git commit -m "Atualizacao Roleta Analytics Web"
-git push
+Expand-Archive -LiteralPath "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.1.0.zip" -DestinationPath "$env:USERPROFILE\Downloads" -Force
+cd "$env:USERPROFILE\Downloads"
+git clone https://github.com/takkaiama/rouletts.git rouletts-publicacao
+Copy-Item "$env:USERPROFILE\Downloads\roleta-analytics-web-v1.1.0\*" "$env:USERPROFILE\Downloads\rouletts-publicacao" -Recurse -Force
+cd "$env:USERPROFILE\Downloads\rouletts-publicacao"
+git add -A
+git commit -m "Roleta Analytics Web v1.1.0 - historico circular e grade incremental"
+git push origin main
 ```
+
+Se a pasta `rouletts-publicacao` já existir, em vez de executar `git clone`, faça `cd` nela e rode `git pull --ff-only origin main` antes do `Copy-Item`.
+
+O Netlify atualizará o front-end após o push se estiver conectado a `takkaiama/rouletts`. O Render também precisará estar conectado ao mesmo repositório e com deploy automático habilitado (ou acione um deploy manual). No Render, configure Root Directory `backend`, Build Command `npm install`, Start Command `npm start`. Não publique `.env` ou o código Python original com token antigo no GitHub.
 
 ## Executar localmente
 

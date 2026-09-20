@@ -4,7 +4,7 @@ const TITLES={n1:'1 número',n2:'2 números',n3:'3 números',n4:'4 números',cor
 const RED=new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
 const color=n=>n===0?'green':RED.has(n)?'red':'black';
 const symbol={V:'🔴',P:'⚫',B:'🟢',0:'🟢',1:'1️⃣',2:'2️⃣',3:'3️⃣'};
-const state={api:localStorage.getItem('roleta_api')||'',token:sessionStorage.getItem('roleta_token')||'',user:null,preferences:null,table:null,spins:[],analyses:{},signals:[],outbox:[],cardsReady:false,busy:false,dialog:false,refreshTimer:null,toastTimer:null};
+const state={api:localStorage.getItem('roleta_api')||'',token:sessionStorage.getItem('roleta_token')||'',user:null,preferences:null,table:null,spins:[],analyses:{},signals:[],outbox:[],cardsReady:false,busy:false,dialog:false,refreshTimer:null,liveTimer:null,liveBusy:false,historyEpoch:null,latestSpinId:'0',toastTimer:null};
 function note(message,error=false){const el=$('toast');el.textContent=message;el.classList.toggle('error',error);el.style.display='block';clearTimeout(state.toastTimer);state.toastTimer=setTimeout(()=>el.style.display='none',5200);}
 function urlBase(s){try{const u=new URL(s);if(!['http:','https:'].includes(u.protocol))throw Error();return u.origin;}catch{return null;}}
 async function api(path,method='GET',body=undefined){
@@ -14,7 +14,7 @@ async function api(path,method='GET',body=undefined){
   if(!res.ok)throw Error(json.error||`Erro HTTP ${res.status}`);
   return json;
 }
-function logout(callApi=true){if(callApi&&state.token)api('/api/logout','POST',{}).catch(()=>{});state.token='';sessionStorage.removeItem('roleta_token');state.user=null;state.cardsReady=false;clearInterval(state.refreshTimer);$('loginView').classList.remove('hidden');$('appView').classList.add('hidden');$('loginPassword').value='';}
+function logout(callApi=true){if(callApi&&state.token)api('/api/logout','POST',{}).catch(()=>{});state.token='';sessionStorage.removeItem('roleta_token');state.user=null;state.cardsReady=false;clearInterval(state.refreshTimer);clearInterval(state.liveTimer);$('loginView').classList.remove('hidden');$('appView').classList.add('hidden');$('loginPassword').value='';}
 function enter(data){state.user=data.user;state.token=data.token;sessionStorage.setItem('roleta_token',data.token);$('whoami').textContent=`${data.user.username} · ${data.user.role==='admin'?'Admin':'Usuário'}`;$('adminButton').classList.toggle('hidden',data.user.role!=='admin');$('loginView').classList.add('hidden');$('appView').classList.remove('hidden');startRefresh();}
 $('serverUrl').value=state.api;
 $('loginForm').addEventListener('submit',async e=>{e.preventDefault();const base=urlBase($('serverUrl').value.trim());if(!base)return note('Informe uma URL http(s) válida do servidor.',true);state.api=base;localStorage.setItem('roleta_api',base);const btn=e.submitter;btn.disabled=true;try{const data=await api('/api/login','POST',{username:$('loginName').value.trim(),password:$('loginPassword').value});enter(data);}catch(err){note(err.message,true);}finally{btn.disabled=false;}});
@@ -85,7 +85,7 @@ function renderLogs(){const signals=$('signalsList'),outbox=$('outboxList');sign
   for(const item of state.outbox){const box=append(outbox,'div','log-item');append(box,'strong','',`${TITLES[item.strategy_key]} · ${item.status} · ${shortTime(item.created_at)}`);append(box,'span','',item.body);if(item.last_error)append(box,'small','error-text',item.last_error);}
 }
 function setTelegramForm(pref){$('telegramEnabled').checked=pref.sendEnabled;$('botToken').placeholder=pref.hasToken?'Token salvo com segurança; deixe vazio para manter':'Token não configurado';$('chatId').placeholder=pref.hasChat?'Chat ID salvo; deixe vazio para manter':'Chat ID não configurado';$('threadId').value=pref.threadId||'';$('galeLimit').value=pref.galeLimit;$('threshold').value=pref.threshold;}
-async function refresh(){if(!state.token||state.busy||state.dialog)return;state.busy=true;try{const wasTable=state.preferences?.tableId;const data=await api('/api/state');state.user=data.user;state.preferences=data.preferences;state.table=data.table;state.spins=data.spins;state.analyses=data.analyses;state.signals=data.signals;state.outbox=data.outbox;state.totalStored=data.totalStored;
+async function refresh(){if(!state.token||state.busy||state.dialog)return;state.busy=true;try{const wasTable=state.preferences?.tableId;const data=await api('/api/state');state.user=data.user;state.preferences=data.preferences;state.table=data.table;state.spins=data.spins;state.analyses=data.analyses;state.signals=data.signals;state.outbox=data.outbox;state.totalStored=data.totalStored;state.historyEpoch=data.historyEpoch;state.latestSpinId=data.latestSpinId;
   const collector=data.collector;const pill=$('livePill');pill.className=`pill ${collector.online?'ok':'error'}`;pill.textContent=collector.online?'● Coleta conectada':`● ${collector.error?'Coleta indisponível':'Conectando'}`;pill.title=collector.error||'';$('lastSync').textContent=shortTime(collector.lastPoll);
   $('whoami').textContent=`${data.user.username} · ${data.user.role==='admin'?'Admin':'Usuário'}`;$('adminButton').classList.toggle('hidden',data.user.role!=='admin');
   if(wasTable!==data.preferences.tableId||(!$('tableSelect').value&&$('tableSelect').options.length<=1))await fetchTables();$('tableSelect').value=data.preferences.tableId||'';
@@ -93,7 +93,35 @@ async function refresh(){if(!state.token||state.busy||state.dialog)return;state.
   if(document.activeElement!==$('botToken')&&document.activeElement!==$('chatId')&&document.activeElement!==$('galeLimit')&&document.activeElement!==$('threshold'))setTelegramForm(data.preferences);
   renderGrid();renderCards();renderFlags();renderLogs();
 }catch(e){if(state.token)note(e.message,true);}finally{state.busy=false;}}
-function startRefresh(){clearInterval(state.refreshTimer);state.cardsReady=false;fetchTables().then(refresh).catch(e=>note(e.message,true));state.refreshTimer=setInterval(refresh,2500);}
+async function liveRefresh(){
+  if(!state.token||!state.preferences?.tableId||state.busy||state.liveBusy||state.dialog)return;
+  state.liveBusy=true;
+  const tableId=state.preferences.tableId;
+  try{
+    const q=new URLSearchParams({tableId,limit:String(state.preferences.displayLimit),afterId:state.latestSpinId,epoch:String(state.historyEpoch)});
+    const d=await api(`/api/live?${q}`);
+    if(tableId!==state.preferences?.tableId)return;
+    const pill=$('livePill');pill.className=`pill ${d.collector.online?'ok':'error'}`;
+    pill.textContent=d.collector.online?'● Coleta conectada':`● ${d.collector.error?'Coleta indisponível':'Conectando'}`;
+    pill.title=d.collector.error||'';$('lastSync').textContent=shortTime(d.collector.lastPoll);
+    state.totalStored=d.totalStored;state.historyEpoch=d.epoch;state.latestSpinId=d.latest;
+    if(d.replace){state.spins=d.spins;state.analyses=d.analyses||state.analyses;renderGrid();renderCards();}
+    else if(d.spins.length){
+      const ids=new Set(d.spins.map(s=>s.id));
+      state.spins=[...d.spins,...state.spins.filter(s=>!ids.has(s.id))].slice(0,state.preferences.displayLimit);
+      state.analyses=d.analyses||state.analyses;
+      renderGrid();renderCards();
+    }else $('storedCount').textContent=String(state.totalStored);
+  }catch(e){if(state.token)note(e.message,true);}finally{state.liveBusy=false;}
+}
+function startRefresh(){
+  clearInterval(state.refreshTimer);clearInterval(state.liveTimer);
+  state.cardsReady=false;
+  fetchTables().then(refresh).catch(e=>note(e.message,true));
+  state.liveTimer=setInterval(liveRefresh,2500);
+  // Preferências, estado dos sinais e fila: atualização mais lenta. Grade usa /api/live.
+  state.refreshTimer=setInterval(refresh,30000);
+}
 async function savePref(body){const r=await api('/api/preferences','PATCH',body);state.preferences=r.preferences;await refresh();}
 $('tableSelect').addEventListener('change',async e=>{e.target.disabled=true;try{await savePref({tableId:e.target.value});$('spinDetails').classList.add('hidden');note('Mesa alterada. Os sinais anteriores foram cancelados.');}catch(err){note(err.message,true);}finally{e.target.disabled=false;}});
 $('countSelect').addEventListener('change',async e=>{if(e.target.value==='custom'){$('customBox').classList.remove('hidden');$('customCount').focus();return;}try{await savePref({displayLimit:Number(e.target.value)});}catch(err){note(err.message,true);}});

@@ -1,6 +1,6 @@
 import pg from 'pg';
 import crypto from 'node:crypto';
-export const pool = new pg.Pool({connectionString:process.env.DATABASE_URL,max:8,connectionTimeoutMillis:12000});
+export const pool = new pg.Pool({connectionString:process.env.DATABASE_URL,max:5,connectionTimeoutMillis:12000,idleTimeoutMillis:30000});
 export async function initDb(){
   await pool.query(`
 CREATE TABLE IF NOT EXISTS users (
@@ -59,9 +59,11 @@ CREATE TABLE IF NOT EXISTS audit_log (
   `);
 }
 export async function trimSpins(tableId){
-  await pool.query(`DELETE FROM spins WHERE table_id=$1 AND id NOT IN
-   (SELECT id FROM spins WHERE table_id=$1 ORDER BY id DESC LIMIT 2000)`,[tableId]);
+  // Limpeza de compatibilidade após inserts manuais ou migração de bancos antigos.
+  await pool.query(`DELETE FROM spins WHERE table_id=$1 AND id IN
+    (SELECT id FROM spins WHERE table_id=$1 ORDER BY id DESC OFFSET 2000)`,[tableId]);
 }
+
 export async function lastSpinId(tableId){
   const {rows}=await pool.query('SELECT COALESCE(MAX(id),0)::text AS id FROM spins WHERE table_id=$1',[tableId]);
   return rows[0].id;

@@ -3,7 +3,8 @@ import express from 'express';
 import {pool,initDb,trimSpins,lastSpinId,uniqueId} from './db.js';
 import {setupEncryption,seedAdmin,requireAuth,requireAdmin,sha,passwordHash,passwordValid,validUsername,validPassword,makeSession,encrypt,decrypt} from './security.js';
 import {live,startWorkers} from './collector.js';
-import {analyze,KEYS} from './strategies.js';
+import {KEYS} from './strategies.js';
+import {getHistory,visibleHistory,getAnalyses,updatesSince,invalidateHistory} from './history-cache.js';
 if(!process.env.DATABASE_URL)throw Error('Configure DATABASE_URL');
 setupEncryption();
 const app=express();app.disable('x-powered-by');
@@ -60,13 +61,23 @@ app.get('/api/state',asyncRoute(async(req,res)=>{
   let spins=[],analyses={},signals=[],outbox=[],tableInfo=null,totalStored=0;
   if(table){
     const {rows:t}=await pool.query('SELECT id,name,last_seen_at,gap_count::text FROM tables WHERE id=$1',[table]);tableInfo=t[0]||null;
-    const {rows:all}=await pool.query('SELECT id::text,number,source,created_at FROM spins WHERE table_id=$1 ORDER BY id DESC LIMIT 2000',[table]);
-    analyses=analyze([...all].reverse());spins=all.slice(0,limit);
-    const {rows:c}=await pool.query('SELECT COUNT(*)::integer AS total FROM spins WHERE table_id=$1',[table]);totalStored=c[0].total;
+    const history=await getHistory(table);
+    analyses=getAnalyses(history);spins=visibleHistory(history,limit);totalStored=history.rows.length;
     const {rows:s}=await pool.query('SELECT id::text,strategy_key,target,kind,attempts,gale_limit,status,created_at,closed_at FROM signals WHERE user_id=$1 AND table_id=$2 ORDER BY id DESC LIMIT 60',[req.user.id,table]);signals=s;
     const {rows:o}=await pool.query('SELECT id::text,strategy_key,status,body,created_at,last_error FROM outbox WHERE user_id=$1 AND table_id=$2 ORDER BY id DESC LIMIT 35',[req.user.id,table]);outbox=o;
   }
-  res.json({user:req.user,preferences:publicPref(pref),table:tableInfo,collector:live,totalStored,spins,analyses,signals,outbox});
+  res.json({user:req.user,preferences:publicPref(pref),table:tableInfo,collector:live,totalStored,spins,analyses,signals,outbox,historyEpoch:table?(await getHistory(table)).epoch:null,latestSpinId:table?(await getHistory(table)).rows.at(-1)?.id||'0':'0'});
+}));
+// Poll leve: somente alterações da grade são transferidas; nenhum SELECT dos 2000 giros.
+app.get('/api/live',asyncRoute(async(req,res)=>{
+  const tableId=String(req.query.tableId||'');
+  if(!tableId||tableId.length>80)return res.status(400).json({error:'Mesa inválida'});
+  const lim=Number(req.query.limit);
+  if(!Number.isInteger(lim)||lim<1||lim>2000)return res.status(400).json({error:'Limite entre 1 e 2.000'});
+  const history=await getHistory(tableId);
+  const delta=updatesSince(history,req.query.afterId,req.query.epoch,lim);
+  res.json({...delta,epoch:history.epoch,totalStored:history.rows.length,
+    analyses:(delta.replace||delta.spins.length)?getAnalyses(history):undefined,collector:live});
 }));
 app.patch('/api/preferences',asyncRoute(async(req,res)=>{
   const pref=await getPref(req.user.id),body=req.body||{};
@@ -175,6 +186,7 @@ app.post('/api/admin/spins',requireAdmin,asyncRoute(async(req,res)=>{
   const exists=await pool.query('SELECT 1 FROM tables WHERE id=$1',[tableId]);if(!exists.rowCount)return res.sendStatus(404);
   const {rows}=await pool.query("INSERT INTO spins(table_id,number,source) VALUES($1,$2,'manual') RETURNING id::text,number",[tableId,number]);
   await trimSpins(tableId);
+  invalidateHistory(tableId);
   await pool.query('INSERT INTO audit_log(actor_id,action,detail) VALUES($1,$2,$3)',[req.user.id,'spin.create',JSON.stringify({...rows[0],tableId})]);res.status(201).json(rows[0]);
 }));
 app.patch('/api/admin/spins/:id',requireAdmin,asyncRoute(async(req,res)=>{
@@ -182,11 +194,13 @@ app.patch('/api/admin/spins/:id',requireAdmin,asyncRoute(async(req,res)=>{
   if(!Number.isInteger(number)||number<0||number>36)return res.status(400).json({error:'Número inválido'});
   const {rows}=await pool.query('UPDATE spins SET number=$2,source=\'manual-corrected\' WHERE id=$1 RETURNING id::text,table_id,number',[req.params.id,number]);
   if(!rows.length)return res.sendStatus(404);
+  invalidateHistory(rows[0].table_id);
   await pool.query('INSERT INTO audit_log(actor_id,action,detail) VALUES($1,$2,$3)',[req.user.id,'spin.edit',JSON.stringify(rows[0])]);res.json(rows[0]);
 }));
 app.delete('/api/admin/spins/:id',requireAdmin,asyncRoute(async(req,res)=>{
   const {rows}=await pool.query('DELETE FROM spins WHERE id=$1 RETURNING id::text,table_id,number',[req.params.id]);
   if(!rows.length)return res.sendStatus(404);
+  invalidateHistory(rows[0].table_id);
   await pool.query('INSERT INTO audit_log(actor_id,action,detail) VALUES($1,$2,$3)',[req.user.id,'spin.delete',JSON.stringify(rows[0])]);res.json({ok:true});
 }));
 app.get('/api/admin/audit',requireAdmin,asyncRoute(async(req,res)=>{

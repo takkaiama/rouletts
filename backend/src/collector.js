@@ -1,5 +1,6 @@
-import {pool,trimSpins} from './db.js';
-import {analyze,color,column,KEYS,inferNewNumbers,matches,TITLES} from './strategies.js';
+import {pool} from './db.js';
+import {getHistory,applySpin,getAnalyses,recentHistory,HISTORY_LIMIT} from './history-cache.js';
+import {color,column,KEYS,inferNewNumbers,matches,TITLES} from './strategies.js';
 import {decrypt} from './security.js';
 export const live={online:false,lastPoll:null,error:null,received:0};
 const API='https://cgp.safe-iplay.com/cgpapi/liveFeed/GetLiveTables';
@@ -16,14 +17,28 @@ function snapshot(obj){
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const symbol={V:'🔴',P:'⚫',B:'🟢',0:'🟢',1:'1️⃣',2:'2️⃣',3:'3️⃣'};
+let nextOutboxCheckAt=0;
 function targetText(key,target){return key.startsWith('col')?`Coluna ${target} ${symbol[target]}`:target==='B'?'Zero 🟢':`${symbol[target]} + proteção no zero 🟢`;}
 async function enqueue(userId,tableId,key,spinId,signalId,body,unique){
   await pool.query('INSERT INTO outbox(user_id,table_id,strategy_key,spin_id,signal_id,body,dedupe_key) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(dedupe_key) DO NOTHING',
     [userId,tableId,key,spinId,signalId,body,unique]);
+  nextOutboxCheckAt=0;
 }
 async function processSpin(tableId,num,source='api'){
-  const {rows:inserted}=await pool.query('INSERT INTO spins(table_id,number,source) VALUES($1,$2,$3) RETURNING id,number,created_at',[tableId,num,source]);
-  const spin=inserted[0];
+  // Uma leitura de 2.000 registros na primeira utilização; demais giros usam o cache.
+  const history=await getHistory(tableId);
+  const oldest=history.rows.length>=HISTORY_LIMIT?history.rows[0]:null;
+  // Inserção e remoção do giro antigo na MESMA transação: nunca deixa 2.001 no banco.
+  const client=await pool.connect();let spin;
+  try{
+    await client.query('BEGIN');
+    const result=await client.query('INSERT INTO spins(table_id,number,source) VALUES($1,$2,$3) RETURNING id::text,number,source,created_at',[tableId,num,source]);
+    spin=result.rows[0];
+    if(oldest)await client.query('DELETE FROM spins WHERE table_id=$1 AND id=$2',[tableId,oldest.id]);
+    await client.query('COMMIT');
+  }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;
+  }finally{client.release();}
+  applySpin(history,spin);
   const {rows:people}=await pool.query('SELECT * FROM preferences WHERE table_id=$1 AND send_enabled=true',[tableId]);
   // Result validation is processed BEFORE new predictions, so SG/G1 never consumes its own setup spin.
   for(const pref of people){
@@ -56,8 +71,7 @@ async function processSpin(tableId,num,source='api'){
       }
     }
   }
-  const {rows:recent}=await pool.query('SELECT id,number,created_at FROM spins WHERE table_id=$1 ORDER BY id DESC LIMIT 2000',[tableId]);
-  const analyses=analyze(recent.reverse());
+  const analyses=getAnalyses(history);
   for(const pref of people){
     if(!pref.bot_token_cipher||!pref.chat_id_cipher||BigInt(spin.id)<=BigInt(pref.armed_after_id))continue;
     for(const key of KEYS){
@@ -76,39 +90,62 @@ async function processSpin(tableId,num,source='api'){
         `signal:${signals[0].id}`);
     }
   }
-  await trimSpins(tableId);
   live.received++;
 }
+// Consulta à origem é compartilhada: nunca uma coleta por usuário ou aba.
 let busy=false;
+const snapshots=new Map();
+let snapshotsReady=false;
+let watchIds=new Set();
+let watchRefreshAt=0;
+async function initSnapshots(){
+  if(snapshotsReady)return;
+  const {rows}=await pool.query('SELECT id,name,last_snapshot FROM tables');
+  for(const row of rows)snapshots.set(row.id,{name:row.name,previous:row.last_snapshot});
+  snapshotsReady=true;
+}
+async function watchedTables(){
+  if(Date.now()<watchRefreshAt)return watchIds;
+  const {rows}=await pool.query('SELECT DISTINCT table_id FROM preferences WHERE table_id IS NOT NULL');
+  watchIds=new Set(rows.map(x=>x.table_id));
+  watchRefreshAt=Date.now()+15000;
+  return watchIds;
+}
 export async function pollOnce(){
   if(busy)return;
   busy=true;
   try{
+    await initSnapshots();
     const response=await fetch(API,{method:'POST',headers:{'content-type':'application/x-www-form-urlencoded','accept':'*/*',
       'origin':'https://br.888casino.com','referer':'https://br.888casino.com/','user-agent':'Mozilla/5.0'},body:postData,
       signal:AbortSignal.timeout(15000)});
     if(!response.ok)throw Error(`Origem HTTP ${response.status}`);
     const body=await response.json();
     if(!body.LiveTables||typeof body.LiveTables!=='object')throw Error('API sem LiveTables');
-    const {rows:watching}=await pool.query('SELECT DISTINCT table_id FROM preferences WHERE table_id IS NOT NULL');
-    const watched=new Set(watching.map(x=>x.table_id));
+    const watched=await watchedTables();
     for(const [id,raw] of Object.entries(body.LiveTables)){
       const now=snapshot(raw);if(!now)continue;
       const name=tableName(id,raw);
-      const {rows:existing}=await pool.query(`INSERT INTO tables(id,name,last_snapshot,last_seen_at) VALUES($1,$2,$3,now())
-       ON CONFLICT(id) DO UPDATE SET name=excluded.name,last_seen_at=now() RETURNING last_snapshot`,[id,name,JSON.stringify(null)]);
+      let info=snapshots.get(id);
+      if(!info){
+        await pool.query('INSERT INTO tables(id,name,last_snapshot,last_seen_at) VALUES($1,$2,NULL,now()) ON CONFLICT(id) DO NOTHING',[id,name]);
+        info={name,previous:null};snapshots.set(id,info);
+      }
       if(!watched.has(id))continue;
-      const previous=existing[0].last_snapshot;
+      const previous=info.previous;
       if(!previous){
-        await pool.query('UPDATE tables SET last_snapshot=$2 WHERE id=$1',[id,JSON.stringify(now)]);
         const count=await pool.query('SELECT 1 FROM spins WHERE table_id=$1 LIMIT 1',[id]);
         if(!count.rowCount)await processSpin(id,now[0],'initial');
-        continue;
+      }else{
+        const {numbers,gap}=inferNewNumbers(previous,now);
+        for(const n of numbers)await processSpin(id,n);
+        if(gap)await pool.query('UPDATE tables SET gap_count=gap_count+1 WHERE id=$1',[id]);
       }
-      const {numbers,gap}=inferNewNumbers(previous,now);
-      for(const n of numbers) await processSpin(id,n);
-      if(gap)await pool.query('UPDATE tables SET gap_count=gap_count+1 WHERE id=$1',[id]);
-      await pool.query('UPDATE tables SET last_snapshot=$2 WHERE id=$1',[id,JSON.stringify(now)]);
+      // Uma gravação de snapshot apenas quando a janela de resultados mudar.
+      if(!previous||previous.length!==now.length||now.some((n,i)=>n!==previous[i])){
+        await pool.query('UPDATE tables SET last_snapshot=$2,last_seen_at=now(),name=$3 WHERE id=$1',[id,JSON.stringify(now),name]);
+        info.previous=now;info.name=name;
+      }
     }
     live.online=true;live.error=null;live.lastPoll=new Date().toISOString();
   }catch(e){
@@ -118,14 +155,15 @@ export async function pollOnce(){
 }
 let sendBusy=false;
 export async function deliverOne(){
-  if(sendBusy)return;
+  if(sendBusy||Date.now()<nextOutboxCheckAt)return;
   sendBusy=true;
   try{
     // Single serialized queue; next message only after previous attempt finishes.
     const {rows}=await pool.query(`SELECT o.*,p.bot_token_cipher,p.chat_id_cipher,p.thread_id,p.send_enabled,p.flags,p.armed_after_id,p.table_id AS selected_table
       FROM outbox o JOIN preferences p ON p.user_id=o.user_id
       WHERE o.status='queued' AND o.run_after<=now() ORDER BY o.id LIMIT 1`);
-    const item=rows[0];if(!item)return;
+    const item=rows[0];if(!item){nextOutboxCheckAt=Date.now()+30000;return;}
+    nextOutboxCheckAt=0;
     if(!item.send_enabled||item.selected_table!==item.table_id||!item.flags?.[item.strategy_key]
       ||BigInt(item.spin_id)<=BigInt(item.armed_after_id)||!item.bot_token_cipher||!item.chat_id_cipher){
       await pool.query("UPDATE outbox SET status='cancelled' WHERE id=$1",[item.id]);return;
@@ -144,6 +182,7 @@ export async function deliverOne(){
       const retry=Number(item.tries)<3;
       await pool.query(`UPDATE outbox SET status=$2,run_after=now()+($3*interval '1 second'),last_error=$4 WHERE id=$1`,
         [item.id,retry?'queued':'failed',retry?10*(Number(item.tries)+1):0,String(e.message).slice(0,180)]);
+      if(retry)nextOutboxCheckAt=Date.now()+10000*(Number(item.tries)+1);
     }
   }catch(e){console.error('[telegram]',e.message);}finally{sendBusy=false;}
 }
