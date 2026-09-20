@@ -1,0 +1,10 @@
+[build]
+  publish = "frontend"
+  command = "echo Static frontend ready"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
