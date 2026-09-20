@@ -1,5 +1,5 @@
 import {pool} from './db.js';
-import {getHistory,applySpin,getAnalyses,recentHistory,HISTORY_LIMIT} from './history-cache.js';
+import {getHistory,applySpin,getAnalyses,HISTORY_LIMIT} from './history-cache.js';
 import {color,column,KEYS,inferNewNumbers,matches,TITLES} from './strategies.js';
 import {decrypt} from './security.js';
 export const live={online:false,lastPoll:null,error:null,received:0};
