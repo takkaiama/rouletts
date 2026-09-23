@@ -13,7 +13,13 @@ const counts = (items,kind) => {
 };
 export function analyze(history) {
   // history ASC, most recent last; matches original pattern search (excluding current suffix).
-  const nums = history.slice(-2000).map(x => typeof x === 'number' ? x : x.number);
+  const records=history.slice(-2000);
+  const nums=records.map(x => typeof x === 'number' ? x : x.number);
+  // 'gap' representa uma lacuna real na origem: não cruzar esse ponto para criar padrões.
+  const gapPrefix=[0];
+  for(const item of records) gapPrefix.push(gapPrefix.at(-1)+(item?.source==='gap'?1:0));
+  const crossesGap=(start,end)=>gapPrefix[end]-gapPrefix[start+1]>0;
+
   const output = {};
   for (const key of KEYS.filter(k=>k!=='consenso')) {
     const kind = key.startsWith('n') ? 'num' : key.startsWith('cor') ? 'cor' : 'col';
@@ -21,8 +27,10 @@ export function analyze(history) {
     const convert = x => kind === 'num' ? x : category(kind,x);
     const recent = nums.slice(-length).map(convert);
     const matched = [];
-    if (nums.length > length) {
+    const usable=nums.length>=length&&!crossesGap(nums.length-length,nums.length);
+    if (usable && nums.length > length) {
       for (let i=0;i<nums.length-length;i++) {
+        if(crossesGap(i,i+length+1))continue;
         let equal = true;
         for (let j=0;j<length;j++) if(convert(nums[i+j])!==recent[j]) {equal=false;break;}
         if(equal) matched.push({number:nums[i+length],time:history[history.length-nums.length+i+length]?.created_at ?? null});
@@ -40,7 +48,7 @@ export function analyze(history) {
       pick = order.reduce((a,b)=> c[b]>c[a]?b:a,order[0]);
       confidence = c[pick]/values.length*100;
     }
-    output[key] = {key,title:TITLES[key],type:kind,sequence:recent,occurrences:matched.length,sample:sampled,counts:c,target:pick,percentage:Number(confidence.toFixed(1))};
+    output[key] = {key,title:TITLES[key],type:kind,sequence:usable?recent:[],occurrences:matched.length,sample:sampled,sampleCount:sampled.length,counts:c,target:pick,percentage:Number(confidence.toFixed(1)),gapLimited:!usable};
   }
   const combined = {V:0,P:0,B:0};
   for (const k of ['n1','n2','n3','n4']) for(const c of ['V','P','B']) combined[c]+=output[k].counts[c]||0;

@@ -1,0 +1,29 @@
+# PowerShell no Windows (copiar o BLOCO inteiro). Pressupõe que o ZIP esteja em Downloads.
+$ErrorActionPreference = 'Stop'
+$zip = Join-Path $env:USERPROFILE 'Downloads\rouletts-v1.4.0-coleta-continua.zip'
+$extraido = Join-Path $env:USERPROFILE 'Downloads\rouletts-v1.4.0-extraido'
+$repositorio = Join-Path $env:USERPROFILE ('Downloads\rouletts-publicacao-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
+if (-not (Test-Path -LiteralPath $zip)) { throw "ZIP nao encontrado em: $zip" }
+Expand-Archive -LiteralPath $zip -DestinationPath $extraido -Force
+$fonte = Join-Path $extraido 'rouletts-v1.4.0'
+if (-not (Test-Path -LiteralPath (Join-Path $fonte 'backend\src\collector.js'))) { throw "Fonte nao encontrada: $fonte" }
+git clone 'https://github.com/takkaiama/rouletts.git' $repositorio
+if ($LASTEXITCODE -ne 0) { throw 'Falha ao clonar o repositorio.' }
+robocopy $fonte $repositorio /E /XD .git node_modules /XF .env
+if ($LASTEXITCODE -ge 8) { throw 'Falha ao copiar os arquivos.' }
+Set-Location -LiteralPath (Join-Path $repositorio 'backend')
+npm ci
+if ($LASTEXITCODE -ne 0) { throw 'Falha no npm ci.' }
+npm test
+if ($LASTEXITCODE -ne 0) { throw 'Testes falharam: publicacao interrompida.' }
+Set-Location -LiteralPath $repositorio
+git status --short
+git add -A
+if ($LASTEXITCODE -ne 0) { throw 'Falha no git add.' }
+git diff --cached --quiet
+if ($LASTEXITCODE -eq 0) { Write-Host 'Nenhuma alteracao pendente para publicar.'; return }
+git commit -m 'v1.4.0: coleta continua de todas as roletas e estrategias corrigidas'
+if ($LASTEXITCODE -ne 0) { throw 'Falha no git commit.' }
+git push origin main
+if ($LASTEXITCODE -ne 0) { throw 'Falha no git push; verifique permissao ou novas alteracoes no remoto.' }
+Write-Host 'Codigo publicado. Confirme o plano sempre ativo e as variaveis de ambiente no Render.'

@@ -55,7 +55,7 @@ function spinLabel(n,showColumn=true){
 }
 function targetLabel(key,target){
   if(target===null||target===undefined||target==='') return '—';
-  if(key?.startsWith('n')) return spinLabel(Number(target));
+  if(key?.startsWith('n')) return target==='B'?'Zero 🟢':`${categorySymbol[target]||target} + Zero 🟢`;
   if(key?.startsWith('col')) return `C${target} ${columnSymbol(Number(target))}`;
   if(target==='B') return 'Zero 🟢';
   return `${categorySymbol[target]||target} + Zero 🟢`;
@@ -138,7 +138,7 @@ function renderGrid(){
   const fragment=document.createDocumentFragment();
   for(const spin of state.spins){
     const classes=['ball',colorKey(spin.number)];
-    if(spin.source!=='api'&&spin.source!=='initial') classes.push('manual');
+    if(spin.source==='manual') classes.push('manual');
     if(state.selectedNumber!==null && spin.number===state.selectedNumber) classes.push('match');
     if(state.selectedNumber!==null && spin.id===state.spins.find(s=>s.number===state.selectedNumber)?.id) classes.push('selected');
     const ball=append(fragment,'button',classes.join(' '));
@@ -192,9 +192,10 @@ function renderCards(){
     if(!data){append(body,'p','',state.preferences?.tableId?'Aguardando histórico.':'Selecione uma roleta.');continue;}
     append(body,'div','sequence',`Padrão: ${(data.sequence||[]).map(v=>sequenceToken(data.type,v)).join(' → ')||'—'}`);
     const stats=append(body,'div','stats');
-    const a=append(stats,'div','statbox');append(a,'b','',data.occurrences||0);append(a,'span','', 'Ocorrências');
-    const b=append(stats,'div','statbox');append(b,'b','',`${data.percentage||0}%`);append(b,'span','', 'Amostra');
+    const a=append(stats,'div','statbox');append(a,'b','',data.occurrences||0);append(a,'span','', 'Ocorrências no histórico');
+    const b=append(stats,'div','statbox');append(b,'b','',`${data.percentage||0}%`);append(b,'span','', `Amostra: ${data.sampleCount??data.sample?.length??0}`);
     const c=append(stats,'div','statbox');append(c,'b','',data.target===null?'—':targetLabel(key,data.target));append(c,'span','', 'Tendência');
+    if(data.gapLimited)append(body,'p','', 'Aguardando sequência completa após lacuna na coleta.');
     const dist=append(body,'div','distribution');
     for(const [name,value] of Object.entries(data.counts||{})){append(dist,'span','dist-item',distributionLabel(data.type,name,value));}
     const sample=append(body,'div','sample');
@@ -321,16 +322,15 @@ async function refresh(){
   if(!state.token||state.busy||state.dialog) return;
   state.busy=true;
   try{
-    const beforeTable=state.preferences?.tableId;
     const data=await api('/api/state');
     state.user=data.user;state.preferences=data.preferences;state.table=data.table;state.spins=data.spins;state.analyses=data.analyses;
     state.signals=data.signals;state.outbox=data.outbox;state.totalStored=data.totalStored;state.historyEpoch=data.historyEpoch;state.latestSpinId=data.latestSpinId;
     state.profileStats=data.profileStats||{all:{}};
     syncProfiles(data.profiles||[]);
     const collector=data.collector||{};
-    const pill=$('livePill');pill.className=`pill ${collector.online?'ok':'error'}`;pill.textContent=collector.online?'● Coleta conectada':`● ${collector.error?'Coleta indisponível':'Conectando'}`;pill.title=collector.error||'';$('lastSync').textContent=shortTime(collector.lastPoll);
+    const pill=$('livePill');pill.className=`pill ${collector.online?'ok':'error'}`;pill.textContent=collector.online?(collector.error?'● Coleta parcial':'● Coleta conectada'):`● ${collector.error?'Coleta indisponível':'Conectando'}`;pill.title=collector.error||'';$('lastSync').textContent=shortTime(collector.lastPoll);
     $('whoami').textContent=`${data.user.username} · ${data.user.role==='admin'?'Admin':'Usuário'}`;$('adminButton').classList.toggle('hidden',data.user.role!=='admin');
-    if(beforeTable!==data.preferences.tableId||(!$('tableSelect').value&&$('tableSelect').options.length<=1)) await fetchTables();
+    await fetchTables(); // mesas novas entram na lista mesmo após o login
     $('tableSelect').value=data.preferences.tableId||'';
     const count=data.preferences.displayLimit;$('countSelect').value=[50,100,200,500,1000,2000].includes(count)?String(count):'custom';$('customBox').classList.toggle('hidden',$('countSelect').value!=='custom');$('customCount').value=count;
     if(!['profileLabel','botToken','chatId','threadId','galeLimit','threshold'].includes(document.activeElement?.id||'')) setTelegramForm(currentProfile());
@@ -346,7 +346,7 @@ async function liveRefresh(){
     const q=new URLSearchParams({tableId,limit:String(state.preferences.displayLimit),afterId:state.latestSpinId,epoch:String(state.historyEpoch)});
     const d=await api(`/api/live?${q}`);
     if(tableId!==state.preferences?.tableId) return;
-    const pill=$('livePill');pill.className=`pill ${d.collector.online?'ok':'error'}`;pill.textContent=d.collector.online?'● Coleta conectada':`● ${d.collector.error?'Coleta indisponível':'Conectando'}`;pill.title=d.collector.error||'';$('lastSync').textContent=shortTime(d.collector.lastPoll);
+    const pill=$('livePill');pill.className=`pill ${d.collector.online?'ok':'error'}`;pill.textContent=d.collector.online?(d.collector.error?'● Coleta parcial':'● Coleta conectada'):`● ${d.collector.error?'Coleta indisponível':'Conectando'}`;pill.title=d.collector.error||'';$('lastSync').textContent=shortTime(d.collector.lastPoll);
     state.totalStored=d.totalStored;state.historyEpoch=d.epoch;state.latestSpinId=d.latest;
     if(d.replace){state.spins=d.spins;state.analyses=d.analyses||state.analyses;renderGrid();renderCards();}
     else if(d.spins.length){const ids=new Set(d.spins.map(s=>s.id));state.spins=[...d.spins,...state.spins.filter(s=>!ids.has(s.id))].slice(0,state.preferences.displayLimit);state.analyses=d.analyses||state.analyses;renderGrid();renderCards();}

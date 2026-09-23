@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import {pool,initDb,trimSpins,lastSpinId,uniqueId} from './db.js';
 import {setupEncryption,seedAdmin,requireAuth,requireAdmin,sha,passwordHash,passwordValid,validUsername,validPassword,makeSession,encrypt,decrypt} from './security.js';
-import {live,startWorkers} from './collector.js';
+import {startWorkers,readCollectorHealth} from './collector.js';
 import {KEYS} from './strategies.js';
 import {getHistory,visibleHistory,getAnalyses,updatesSince,invalidateHistory} from './history-cache.js';
 
@@ -34,7 +34,7 @@ app.use((req,res,next)=>{
 const asyncRoute=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(next);
 const loginAttempts=new Map();
 const SUPPORTED_TABLE_RE=/(roulette|roleta)/i;
-const EXCLUDED_TABLE_RE=/(crazy time|craps|dream catcher|olympus|baccarat|blackjack|poker|dragon tiger)/i;
+const EXCLUDED_TABLE_RE=/(crazy time|craps|dream catcher|olympus|baccarat|blackjack|poker|dragon tiger|american roulette)/i;
 
 const sanitizeTableName=name=>String(name||'').replace(/\s*[·-]\s*\d{5,}$/,'').trim();
 const isSupportedTable=name=>SUPPORTED_TABLE_RE.test(String(name||'')) && !EXCLUDED_TABLE_RE.test(String(name||'')) && !/888/i.test(String(name||''));
@@ -149,10 +149,10 @@ async function getProfileStats(userId,tableId){
 app.get('/api/health',asyncRoute(async(req,res)=>{
   try{
     await pool.query('SELECT 1');
-    res.json({ok:true,database:'connected',collector:live});
+    res.json({ok:true,database:'connected',collector:await readCollectorHealth()});
   }catch(error){
     console.error('[health] PostgreSQL indisponível:',error.code||error.message);
-    res.status(503).json({ok:false,database:'unavailable',collector:live});
+    res.status(503).json({ok:false,database:'unavailable',collector:{online:false,error:'Banco indisponível'}});
   }
 }));
 
@@ -220,7 +220,7 @@ app.get('/api/state',asyncRoute(async(req,res)=>{
     outbox=o;
     profileStats=await getProfileStats(req.user.id,table);
   }
-  res.json({user:req.user,preferences:publicPref(pref),profiles,table:tableInfo,collector:live,totalStored,spins,analyses,signals,outbox,historyEpoch,latestSpinId,profileStats});
+  res.json({user:req.user,preferences:publicPref(pref),profiles,table:tableInfo,collector:await readCollectorHealth(),totalStored,spins,analyses,signals,outbox,historyEpoch,latestSpinId,profileStats});
 }));
 
 app.get('/api/live',asyncRoute(async(req,res)=>{
@@ -232,7 +232,7 @@ app.get('/api/live',asyncRoute(async(req,res)=>{
   const delta=updatesSince(history,req.query.afterId,req.query.epoch,lim);
   res.json({...delta,epoch:history.epoch,totalStored:history.rows.length,
     analyses:(delta.replace||delta.spins.length)?getAnalyses(history):undefined,
-    latest:history.rows.at(-1)?.id||'0',collector:live});
+    latest:history.rows.at(-1)?.id||'0',collector:await readCollectorHealth()});
 }));
 
 app.patch('/api/preferences',asyncRoute(async(req,res)=>{
@@ -408,6 +408,7 @@ app.post('/api/admin/spins',requireAdmin,asyncRoute(async(req,res)=>{
     await client.query('BEGIN');
     ({rows}=await client.query("INSERT INTO spins(table_id,number,source) VALUES($1,$2,'manual') RETURNING id::text,number",[tableId,number]));
     await trimSpins(tableId,client);
+    await client.query('UPDATE tables SET history_revision=history_revision+1 WHERE id=$1',[tableId]);
     await client.query('COMMIT');
   }catch(error){
     await client.query('ROLLBACK').catch(()=>{});
@@ -420,15 +421,29 @@ app.post('/api/admin/spins',requireAdmin,asyncRoute(async(req,res)=>{
 app.patch('/api/admin/spins/:id',requireAdmin,asyncRoute(async(req,res)=>{
   const {number}=req.body||{};
   if(!Number.isInteger(number)||number<0||number>36) return res.status(400).json({error:'Número inválido'});
-  const {rows}=await pool.query("UPDATE spins SET number=$2,source='manual-corrected' WHERE id=$1 RETURNING id::text,table_id,number",[req.params.id,number]);
-  if(!rows.length) return res.sendStatus(404);
+  const client=await pool.connect();
+  let rows;
+  try{
+    await client.query('BEGIN');
+    ({rows}=await client.query("UPDATE spins SET number=$2,source='manual-corrected' WHERE id=$1 RETURNING id::text,table_id,number",[req.params.id,number]));
+    if(rows.length)await client.query('UPDATE tables SET history_revision=history_revision+1 WHERE id=$1',[rows[0].table_id]);
+    await client.query('COMMIT');
+  }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}finally{client.release();}
+  if(!rows.length)return res.sendStatus(404);
   invalidateHistory(rows[0].table_id);
   await pool.query('INSERT INTO audit_log(actor_id,action,detail) VALUES($1,$2,$3)',[req.user.id,'spin.edit',JSON.stringify(rows[0])]);
   res.json(rows[0]);
 }));
 app.delete('/api/admin/spins/:id',requireAdmin,asyncRoute(async(req,res)=>{
-  const {rows}=await pool.query('DELETE FROM spins WHERE id=$1 RETURNING id::text,table_id,number',[req.params.id]);
-  if(!rows.length) return res.sendStatus(404);
+  const client=await pool.connect();
+  let rows;
+  try{
+    await client.query('BEGIN');
+    ({rows}=await client.query('DELETE FROM spins WHERE id=$1 RETURNING id::text,table_id,number',[req.params.id]));
+    if(rows.length)await client.query('UPDATE tables SET history_revision=history_revision+1 WHERE id=$1',[rows[0].table_id]);
+    await client.query('COMMIT');
+  }catch(e){await client.query('ROLLBACK').catch(()=>{});throw e;}finally{client.release();}
+  if(!rows.length)return res.sendStatus(404);
   invalidateHistory(rows[0].table_id);
   await pool.query('INSERT INTO audit_log(actor_id,action,detail) VALUES($1,$2,$3)',[req.user.id,'spin.delete',JSON.stringify(rows[0])]);
   res.json({ok:true});
@@ -453,4 +468,7 @@ try{
   await pool.end();
   throw error;
 }
-app.listen(port,()=>{console.log(`Servidor pronto na porta ${port}`);startWorkers();});
+app.listen(port,()=>{
+  console.log(`Servidor pronto na porta ${port}; coleta=${process.env.COLLECTOR_MODE==='external'?'serviço separado':'no web service'}`);
+  if(process.env.COLLECTOR_MODE!=='external')startWorkers();
+});

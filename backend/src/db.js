@@ -14,7 +14,13 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE TABLE IF NOT EXISTS tables (
  id text PRIMARY KEY, name text NOT NULL, last_snapshot jsonb, last_seen_at timestamptz,
- gap_count bigint NOT NULL DEFAULT 0
+ gap_count bigint NOT NULL DEFAULT 0, history_revision bigint NOT NULL DEFAULT 0
+);
+ALTER TABLE tables ADD COLUMN IF NOT EXISTS history_revision bigint NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS collector_health (
+ id smallint PRIMARY KEY CHECK(id=1), last_poll timestamptz, last_success timestamptz,
+ last_error text, received_total bigint NOT NULL DEFAULT 0,
+ table_count integer NOT NULL DEFAULT 0, table_errors integer NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS spins (
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, table_id text NOT NULL REFERENCES tables(id),
