@@ -59,7 +59,7 @@
           <div class="grid cols-4">
             <label>Horímetro inicial<input name="hourmeter_initial" required /></label>
             <label>Horímetro final<input name="hourmeter_final" required /></label>
-            <label>Horas horímetro<input name="hourmeter_hours" required /></label>
+            <label>Horas horímetro<input name="hourmeter_hours" readonly required /></label>
             <div class="split"><label>Turno início<input name="shift_start" type="time" required /></label><label>Fim<input name="shift_end" type="time" required /></label></div>
             <label>Horímetro abastecimento<input name="hourmeter_fueling" /></label>
             <label>Diesel (L)<input name="diesel_l" inputmode="decimal" /></label>
@@ -73,16 +73,15 @@
           <div class="section-head"><div class="section-title no-margin">Paradas / intervenções</div><button id="addStop" type="button" class="btn secondary">+ Parada</button></div>
           <div class="table-wrap"><table><thead><tr><th>Código</th><th>Início</th><th>Fim</th><th>Motivo / executante</th><th>Tempo (min)</th><th></th></tr></thead><tbody id="stopsBody"></tbody></table></div>
 
-          <details class="codes"><summary>Códigos de parada</summary><div id="stopCodes" class="code-grid"></div></details>
 
           <div class="section-title">Resumo da operação</div>
           <div class="grid cols-4">
-            <label>Total de viagens<input name="total_trips" required /></label>
-            <label>Horas do turno<input name="shift_hours" required /></label>
-            <label>Horas operadas<input name="operated_hours" required /></label>
-            <label>Horas improdutivas<input name="unproductive_hours" required /></label>
-            <label class="span-2">Paradas operacionais (h)<input name="operational_stops" required /></label>
-            <label class="span-2">Paradas de manutenção (h)<input name="maintenance_stops" required /></label>
+            <label>Total de viagens<input name="total_trips" readonly required /></label>
+            <label>Horas do turno<input name="shift_hours" readonly required /></label>
+            <label>Horas operadas<input name="operated_hours" readonly required /></label>
+            <label>Horas improdutivas<input name="unproductive_hours" readonly required /></label>
+            <label class="span-2">Paradas operacionais (h)<input name="operational_stops" readonly required /></label>
+            <label class="span-2">Paradas de manutenção (h)<input name="maintenance_stops" readonly required /></label>
             <label class="span-4">Observações<textarea name="observations" rows="4"></textarea></label>
             <label class="span-2">Assinatura / nome do operador<input name="operator_signature" /></label>
             <label class="span-2">Assinatura / nome do encarregado<input name="supervisor_signature" /></label>

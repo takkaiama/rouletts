@@ -10,7 +10,6 @@ function showApp(user){currentUser=user;$('#authScreen').classList.add('hidden')
 function showAuth(){currentUser=null;$('#app').classList.add('hidden');$('#authScreen').classList.remove('hidden')}
 
 async function boot(){
-  $('#stopCodes').innerHTML=stopCodes.map(([c,d])=>`<div><strong>${c}</strong> ${d}</div>`).join('');
   addTripRow(); addStopRow();
   try{const me=await api('/api/me');showApp(me.user);await loadRecords();}catch{showAuth()}
   try{const s=await api('/api/setup/status');if(s.needsSetup){$('#authSubtitle').textContent='Primeiro acesso — crie o administrador';$('#loginForm button').textContent='Criar administrador';$('#loginForm').dataset.setup='1';}}catch{}
@@ -21,11 +20,61 @@ $('#logoutBtn').onclick=async()=>{await api('/api/logout',{method:'POST'}).catch
 
 $$('.tab').forEach(b=>b.onclick=()=>{if(b.dataset.tab==='admin'&&currentUser?.role!=='admin')return;$$('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');$$('main > section').forEach(x=>x.classList.add('hidden'));$(`#tab-${b.dataset.tab}`).classList.remove('hidden');if(b.dataset.tab==='records')loadRecords();if(b.dataset.tab==='admin')loadAdmin();});
 
-function addTripRow(){const n=$('#tripsBody').children.length+1;const tr=document.createElement('tr');tr.innerHTML=`<td class="trip-n">${String(n).padStart(2,'0')}</td><td><input data-k="origin"></td><td><input data-k="destination"></td><td><input data-k="start" type="time"></td><td><input data-k="end" type="time"></td><td><input data-k="cycle"></td><td><input data-k="stop_code"></td><td><button type="button" class="icon-btn">×</button></td>`;tr.querySelector('button').onclick=()=>{tr.remove();renumberTrips()};$('#tripsBody').appendChild(tr)}
+function stopOptions(){return `<option value="">—</option>${stopCodes.map(([c,d])=>`<option value="${c}">${c} - ${esc(d)}</option>`).join('')}`}
+function addTripRow(){
+  const n=$('#tripsBody').children.length+1;
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td class="trip-n">${String(n).padStart(2,'0')}</td><td><input data-k="origin"></td><td><input data-k="destination"></td><td><input data-k="start" type="time"></td><td><input data-k="end" type="time"></td><td><input data-k="cycle" readonly></td><td><select data-k="stop_code">${stopOptions()}</select></td><td><button type="button" class="icon-btn">×</button></td>`;
+  tr.querySelector('button').onclick=()=>{tr.remove();renumberTrips();updateSummary()};
+  tr.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',()=>{updateTripCycle(tr);updateSummary()}));
+  $('#tripsBody').appendChild(tr);
+}
 function renumberTrips(){[...$('#tripsBody').children].forEach((tr,i)=>tr.querySelector('.trip-n').textContent=String(i+1).padStart(2,'0'))}
-function addStopRow(){const tr=document.createElement('tr');tr.innerHTML=`<td><input data-k="code"></td><td><input data-k="start" type="time"></td><td><input data-k="end" type="time"></td><td><input data-k="reason"></td><td><input data-k="minutes"></td><td><button type="button" class="icon-btn">×</button></td>`;tr.querySelector('button').onclick=()=>tr.remove();$('#stopsBody').appendChild(tr)}
-$('#addTrip').onclick=addTripRow;$('#addStop').onclick=addStopRow;
-function rowsToData(sel){return [...$(sel).children].map(tr=>Object.fromEntries([...tr.querySelectorAll('input')].map(i=>[i.dataset.k,i.value.trim()]))).filter(o=>Object.values(o).some(Boolean))}
+function addStopRow(){
+  const tr=document.createElement('tr');
+  tr.innerHTML=`<td><select data-k="code">${stopOptions()}</select></td><td><input data-k="start" type="time"></td><td><input data-k="end" type="time"></td><td><input data-k="reason"></td><td><input data-k="minutes" readonly></td><td><button type="button" class="icon-btn">×</button></td>`;
+  tr.querySelector('button').onclick=()=>{tr.remove();updateSummary()};
+  tr.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',()=>{updateStopMinutes(tr);updateSummary()}));
+  $('#stopsBody').appendChild(tr);
+}
+$('#addTrip').onclick=()=>{addTripRow();updateSummary()};$('#addStop').onclick=()=>{addStopRow();updateSummary()};
+function rowsToData(sel){return [...$(sel).children].map(tr=>Object.fromEntries([...tr.querySelectorAll('input,select')].map(i=>[i.dataset.k,i.value.trim()]))).filter(o=>Object.values(o).some(Boolean))}
+
+function parseNum(v){const n=Number(String(v??'').trim().replace(',','.'));return Number.isFinite(n)?n:null}
+function minutesBetween(start,end){
+  if(!start||!end)return null;
+  const [sh,sm]=start.split(':').map(Number),[eh,em]=end.split(':').map(Number);
+  let a=sh*60+sm,b=eh*60+em;if(b<a)b+=1440;return b-a;
+}
+function fmtHoursFromMinutes(min){if(min==null||!Number.isFinite(min))return '';return (min/60).toFixed(2).replace('.',',')}
+function fmtDecimal(n){return n==null||!Number.isFinite(n)?'':n.toFixed(2).replace('.',',')}
+function updateTripCycle(tr){const m=minutesBetween(tr.querySelector('[data-k="start"]').value,tr.querySelector('[data-k="end"]').value);tr.querySelector('[data-k="cycle"]').value=m==null?'':m}
+function updateStopMinutes(tr){const m=minutesBetween(tr.querySelector('[data-k="start"]').value,tr.querySelector('[data-k="end"]').value);tr.querySelector('[data-k="minutes"]').value=m==null?'':m}
+const maintenanceCodes=new Set(['02','05','06','07','11','12','20','21','22']);
+function updateSummary(){
+  const hi=parseNum($('[name="hourmeter_initial"]')?.value),hf=parseNum($('[name="hourmeter_final"]')?.value);
+  const hh=hi!=null&&hf!=null&&hf>=hi?hf-hi:null;
+  $('[name="hourmeter_hours"]').value=fmtDecimal(hh);
+
+  const sm=minutesBetween($('[name="shift_start"]').value,$('[name="shift_end"]').value);
+  $('[name="shift_hours"]').value=fmtHoursFromMinutes(sm);
+  $('[name="operated_hours"]').value=fmtDecimal(hh);
+
+  const trips=[...$('#tripsBody').children].filter(tr=>[...tr.querySelectorAll('input,select')].some(el=>el.dataset.k!=='cycle'&&el.value.trim()));
+  $('[name="total_trips"]').value=trips.length;
+
+  let totalStop=0, maintenance=0, operational=0;
+  [...$('#stopsBody').children].forEach(tr=>{
+    const code=tr.querySelector('[data-k="code"]').value;
+    const mins=parseNum(tr.querySelector('[data-k="minutes"]').value)||0;
+    totalStop+=mins;
+    if(maintenanceCodes.has(code))maintenance+=mins;else if(code)operational+=mins;
+  });
+  $('[name="unproductive_hours"]').value=fmtHoursFromMinutes(totalStop);
+  $('[name="operational_stops"]').value=fmtHoursFromMinutes(operational);
+  $('[name="maintenance_stops"]').value=fmtHoursFromMinutes(maintenance);
+}
+['hourmeter_initial','hourmeter_final','shift_start','shift_end'].forEach(n=>$(`[name="${n}"]`).addEventListener('input',updateSummary));
 
 let machineTimer;
 $('#machineCode').addEventListener('input',()=>{clearTimeout(machineTimer);$('#machineDescription').value='';const q=$('#machineCode').value.trim();if(!q){$('#machineSuggest').classList.add('hidden');return}machineTimer=setTimeout(()=>searchMachines(q),180)});
@@ -34,7 +83,7 @@ function compact(v){return String(v).toUpperCase().replace(/[^A-Z0-9]/g,'')}
 function selectMachine(code,desc,hide=true){$('#machineCode').value=code;$('#machineDescription').value=desc;if(hide)$('#machineSuggest').classList.add('hidden')}
 document.addEventListener('click',e=>{if(!e.target.closest('.machine-field'))$('#machineSuggest').classList.add('hidden')});
 
-$('#bdtForm').addEventListener('reset',()=>setTimeout(()=>{$('#machineDescription').value='';$('#tripsBody').innerHTML='';$('#stopsBody').innerHTML='';addTripRow();addStopRow();},0));
+$('#bdtForm').addEventListener('reset',()=>setTimeout(()=>{$('#machineDescription').value='';$('#tripsBody').innerHTML='';$('#stopsBody').innerHTML='';addTripRow();addStopRow();updateSummary();},0));
 $('#bdtForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const data=Object.fromEntries(f.entries());data.trips=rowsToData('#tripsBody');data.interventions=rowsToData('#stopsBody');try{const j=await api('/api/records',{method:'POST',body:JSON.stringify(data)});toast(`BDT #${j.record.id} salvo.`);e.currentTarget.reset();await loadRecords();}catch(err){toast(err.message,true)}});
 
 async function loadRecords(){if(!currentUser)return;try{const {records}=await api('/api/records');$('#recordsBody').innerHTML=records.map(r=>`<tr><td>${r.id}</td><td>${esc(r.work_date)}</td><td>${esc(r.shift)}</td><td>${esc(r.farm)}</td><td>${esc(r.machine_code)}</td><td>${esc(r.machine_description)}</td><td>${esc(r.operator_name)}</td><td>${esc(r.total_trips)}</td><td>${esc(r.created_by_name||'')}</td><td><button class="btn secondary view-record" data-id="${r.id}">Ver</button>${currentUser.role==='admin'?` <button class="btn ghost danger delete-record" data-id="${r.id}">Excluir</button>`:''}</td></tr>`).join('')||'<tr><td colspan="10">Nenhum registro.</td></tr>';$$('.view-record').forEach(b=>b.onclick=()=>viewRecord(b.dataset.id));$$('.delete-record').forEach(b=>b.onclick=()=>deleteRecord(b.dataset.id));}catch(err){toast(err.message,true)}}
