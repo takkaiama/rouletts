@@ -45,6 +45,7 @@ export async function initDb() {
 
     CREATE TABLE IF NOT EXISTS bdt_records (
       id BIGSERIAL PRIMARY KEY,
+      client_uuid TEXT,
       work_date VARCHAR(20) NOT NULL,
       shift VARCHAR(30) NOT NULL,
       operation_code VARCHAR(30),
@@ -85,6 +86,8 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_bdt_records_date ON bdt_records(work_date);
     CREATE INDEX IF NOT EXISTS idx_bdt_records_machine ON bdt_records(machine_code);
     CREATE INDEX IF NOT EXISTS idx_bdt_records_creator ON bdt_records(created_by);
+    ALTER TABLE bdt_records ADD COLUMN IF NOT EXISTS client_uuid TEXT;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bdt_records_client_uuid ON bdt_records(client_uuid);
   `);
 
   const machineCount = await pool.query('SELECT COUNT(*)::int AS count FROM bdt_machines');

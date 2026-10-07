@@ -1,10 +1,12 @@
-# Biotec BDT Online v1.4.0
+# Biotec BDT Online/Offline v1.5.0
 
-Atualização com catálogo oficial extraído da base operacional enviada.
-
-- BT em lista suspensa com descrição automática.
-- 16 equipamentos pré-cadastrados.
-- Fazenda em lista suspensa com 18 nomes consolidados da base.
-- Mantidos login Admin/User, cálculos automáticos, viagens, paradas, histórico e administração.
+- PWA online/offline no padrão operacional.
+- Primeiro login no dispositivo exige internet; depois a sessão local permite abrir o formulário offline.
+- BTs, fazendas e operadores ficam disponíveis offline após sincronização.
+- BDTs sem internet são salvos em IndexedDB como PENDENTE.
+- Sincronização automática ao voltar a conexão e também a cada 30 segundos.
+- Identificador `client_uuid` evita duplicidade em reenvios.
+- Registros pendentes aparecem no histórico com o estado da sincronização.
+- Administração de usuários, BTs e fazendas continua online.
 
 Para publicar no repositório conectado ao Render, execute `PUBLICAR.ps1`.

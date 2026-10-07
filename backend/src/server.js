@@ -252,7 +252,7 @@ app.patch('/api/users/:id', auth, adminOnly, async (req, res) => {
 const recordFields = ['work_date','shift','farm','up_area','machine_code','operator_name','employee_id','hourmeter_initial','hourmeter_final','shift_start','shift_end'];
 app.post('/api/records', auth, async (req, res) => {
   try {
-    const b = req.body || {}; const missing = required(b, recordFields);
+    const b = req.body || {}; const clientUuid = cleanText(b.client_uuid, 100) || null; const missing = required(b, recordFields);
     if (missing.length) return res.status(400).json({ error: `Preencha os campos obrigatórios: ${missing.join(', ')}` });
     const machineCode = normalizeCode(b.machine_code);
     const mq = await pool.query(`
@@ -266,10 +266,12 @@ app.post('/api/records', auth, async (req, res) => {
     const calc = calculateRecord(b);
     const machine = mq.rows[0];
     await pool.query(`INSERT INTO bdt_machines(code,description,active) VALUES($1,$2,true) ON CONFLICT(code) DO UPDATE SET description=EXCLUDED.description,active=true,updated_at=NOW()`, [machine.code,machine.description]);
-    const vals = [cleanText(b.work_date,20),cleanText(b.shift,30),cleanText(b.operation_code,30),cleanText(b.sheet_no,20),cleanText(b.sheet_total,20),cleanText(b.farm,180),cleanText(b.up_area,180),machine.code,machine.description,cleanText(b.operator_name,180),cleanText(b.employee_id,80),cleanText(b.trailer_set,180),cleanText(b.hourmeter_initial,40),cleanText(b.hourmeter_final,40),calc.hourmeter_hours,cleanText(b.shift_start,20),cleanText(b.shift_end,20),cleanText(b.hourmeter_fueling,40),cleanText(b.diesel_l,40),cleanText(b.hydraulic_oil_l,40),cleanText(b.fueling_responsible,180),JSON.stringify(calc.trips),JSON.stringify(calc.interventions),calc.total_trips,calc.shift_hours,calc.operated_hours,calc.unproductive_hours,calc.operational_stops,calc.maintenance_stops,cleanText(b.observations,5000),cleanText(b.operator_signature,180),cleanText(b.supervisor_signature,180),req.user.id];
-    const { rows } = await pool.query(`INSERT INTO bdt_records(work_date,shift,operation_code,sheet_no,sheet_total,farm,up_area,machine_code,machine_description,operator_name,employee_id,trailer_set,hourmeter_initial,hourmeter_final,hourmeter_hours,shift_start,shift_end,hourmeter_fueling,diesel_l,hydraulic_oil_l,fueling_responsible,trips,interventions,total_trips,shift_hours,operated_hours,unproductive_hours,operational_stops,maintenance_stops,observations,operator_signature,supervisor_signature,created_by)
-    VALUES(${vals.map((_,i)=>'$'+(i+1)).join(',')}) RETURNING id,created_at`, vals);
-    res.json({ record: rows[0] });
+    const vals = [clientUuid,cleanText(b.work_date,20),cleanText(b.shift,30),cleanText(b.operation_code,30),cleanText(b.sheet_no,20),cleanText(b.sheet_total,20),cleanText(b.farm,180),cleanText(b.up_area,180),machine.code,machine.description,cleanText(b.operator_name,180),cleanText(b.employee_id,80),cleanText(b.trailer_set,180),cleanText(b.hourmeter_initial,40),cleanText(b.hourmeter_final,40),calc.hourmeter_hours,cleanText(b.shift_start,20),cleanText(b.shift_end,20),cleanText(b.hourmeter_fueling,40),cleanText(b.diesel_l,40),cleanText(b.hydraulic_oil_l,40),cleanText(b.fueling_responsible,180),JSON.stringify(calc.trips),JSON.stringify(calc.interventions),calc.total_trips,calc.shift_hours,calc.operated_hours,calc.unproductive_hours,calc.operational_stops,calc.maintenance_stops,cleanText(b.observations,5000),cleanText(b.operator_signature,180),cleanText(b.supervisor_signature,180),req.user.id];
+    const { rows } = await pool.query(`INSERT INTO bdt_records(client_uuid,work_date,shift,operation_code,sheet_no,sheet_total,farm,up_area,machine_code,machine_description,operator_name,employee_id,trailer_set,hourmeter_initial,hourmeter_final,hourmeter_hours,shift_start,shift_end,hourmeter_fueling,diesel_l,hydraulic_oil_l,fueling_responsible,trips,interventions,total_trips,shift_hours,operated_hours,unproductive_hours,operational_stops,maintenance_stops,observations,operator_signature,supervisor_signature,created_by)
+    VALUES(${vals.map((_,i)=>'$'+(i+1)).join(',')}) ON CONFLICT (client_uuid) DO NOTHING RETURNING id,created_at`, vals);
+    if (rows[0]) return res.json({ record: rows[0] });
+    if (clientUuid) { const existing = await pool.query('SELECT id,created_at FROM bdt_records WHERE client_uuid=$1 LIMIT 1',[clientUuid]); if(existing.rows[0]) return res.json({record:existing.rows[0],duplicate:true}); }
+    throw new Error('Não foi possível salvar o BDT.');
   } catch (e) { if (e.status) return res.status(e.status).json({error:e.message}); throw e; }
 });
 app.get('/api/records', auth, async (req, res) => {

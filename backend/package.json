@@ -1,13 +1,15 @@
 {
   "name": "biotec-bdt-online",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js"
   },
-  "engines": {"node": ">=22 <25"},
+  "engines": {
+    "node": ">=22 <25"
+  },
   "dependencies": {
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
