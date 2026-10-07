@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#173f31" />
+  <title>Biotec BDT</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="toast" class="toast"></div>
+
+  <section id="authScreen" class="auth-screen">
+    <form id="loginForm" class="auth-card" autocomplete="on">
+      <div class="brand">Biotec</div>
+      <h1>BDT Online</h1>
+      <p id="authSubtitle">Acesso ao sistema</p>
+      <label>Login<input id="loginUser" name="username" autocomplete="username" required /></label>
+      <label>Senha<input id="loginPass" name="password" type="password" autocomplete="current-password" required minlength="6" /></label>
+      <button class="btn primary" type="submit">Entrar</button>
+      <div id="authError" class="error"></div>
+    </form>
+  </section>
+
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <div>
+        <div class="brand small">Biotec</div>
+        <div class="subtitle">BDT - Boletim Diário de Trabalho</div>
+      </div>
+      <div class="userbox"><span id="currentUser"></span><span id="currentRole" class="badge"></span><button id="logoutBtn" class="btn ghost">Sair</button></div>
+    </header>
+
+    <nav class="tabs">
+      <button data-tab="form" class="tab active">Novo BDT</button>
+      <button data-tab="records" class="tab">Registros</button>
+      <button data-tab="admin" class="tab admin-only hidden">Administração</button>
+    </nav>
+
+    <main>
+      <section id="tab-form" class="panel">
+        <form id="bdtForm">
+          <div class="section-title">Identificação</div>
+          <div class="grid cols-4">
+            <label>Data<input name="work_date" type="date" required /></label>
+            <label>Turno<select name="shift" required><option value="">Selecione</option><option>DIURNO</option><option>NOTURNO</option></select></label>
+            <label>Cód. operação<input name="operation_code" value="28" /></label>
+            <div class="split"><label>Folha<input name="sheet_no" /></label><label>De<input name="sheet_total" /></label></div>
+            <label class="span-2">Fazenda<input name="farm" required /></label>
+            <label>UP / Área<input name="up_area" required /></label>
+            <label class="machine-field">Cód. máquina / BT<input id="machineCode" name="machine_code" autocomplete="off" required /><div id="machineSuggest" class="suggestions hidden"></div></label>
+            <label class="span-2">Descrição do maquinário<input id="machineDescription" name="machine_description" readonly required /></label>
+            <label>Operador<input name="operator_name" required /></label>
+            <label>Matrícula<input name="employee_id" required /></label>
+            <label class="span-2">Carreta / Conjunto<input name="trailer_set" /></label>
+          </div>
+
+          <div class="section-title">Horímetros e abastecimento</div>
+          <div class="grid cols-4">
+            <label>Horímetro inicial<input name="hourmeter_initial" required /></label>
+            <label>Horímetro final<input name="hourmeter_final" required /></label>
+            <label>Horas horímetro<input name="hourmeter_hours" required /></label>
+            <div class="split"><label>Turno início<input name="shift_start" type="time" required /></label><label>Fim<input name="shift_end" type="time" required /></label></div>
+            <label>Horímetro abastecimento<input name="hourmeter_fueling" /></label>
+            <label>Diesel (L)<input name="diesel_l" inputmode="decimal" /></label>
+            <label>Óleo hidr. (L)<input name="hydraulic_oil_l" inputmode="decimal" /></label>
+            <label>Resp. abastecimento<input name="fueling_responsible" /></label>
+          </div>
+
+          <div class="section-head"><div class="section-title no-margin">Controle de viagens</div><button id="addTrip" type="button" class="btn secondary">+ Viagem</button></div>
+          <div class="table-wrap"><table><thead><tr><th>#</th><th>Bloco origem</th><th>Pilha destino</th><th>Início carregamento</th><th>Fim retorno</th><th>Tempo ciclo (min)</th><th>Cód. parada</th><th></th></tr></thead><tbody id="tripsBody"></tbody></table></div>
+
+          <div class="section-head"><div class="section-title no-margin">Paradas / intervenções</div><button id="addStop" type="button" class="btn secondary">+ Parada</button></div>
+          <div class="table-wrap"><table><thead><tr><th>Código</th><th>Início</th><th>Fim</th><th>Motivo / executante</th><th>Tempo (min)</th><th></th></tr></thead><tbody id="stopsBody"></tbody></table></div>
+
+          <details class="codes"><summary>Códigos de parada</summary><div id="stopCodes" class="code-grid"></div></details>
+
+          <div class="section-title">Resumo da operação</div>
+          <div class="grid cols-4">
+            <label>Total de viagens<input name="total_trips" required /></label>
+            <label>Horas do turno<input name="shift_hours" required /></label>
+            <label>Horas operadas<input name="operated_hours" required /></label>
+            <label>Horas improdutivas<input name="unproductive_hours" required /></label>
+            <label class="span-2">Paradas operacionais (h)<input name="operational_stops" required /></label>
+            <label class="span-2">Paradas de manutenção (h)<input name="maintenance_stops" required /></label>
+            <label class="span-4">Observações<textarea name="observations" rows="4"></textarea></label>
+            <label class="span-2">Assinatura / nome do operador<input name="operator_signature" /></label>
+            <label class="span-2">Assinatura / nome do encarregado<input name="supervisor_signature" /></label>
+          </div>
+          <div class="actions"><button type="reset" class="btn ghost">Limpar</button><button type="submit" class="btn primary">Salvar BDT</button></div>
+        </form>
+      </section>
+
+      <section id="tab-records" class="panel hidden">
+        <div class="section-head"><div class="section-title no-margin">Registros</div><button id="refreshRecords" class="btn secondary">Atualizar</button></div>
+        <div class="table-wrap"><table><thead><tr><th>ID</th><th>Data</th><th>Turno</th><th>Fazenda</th><th>BT</th><th>Máquina</th><th>Operador</th><th>Viagens</th><th>Criado por</th><th></th></tr></thead><tbody id="recordsBody"></tbody></table></div>
+      </section>
+
+      <section id="tab-admin" class="panel hidden admin-only">
+        <div class="admin-grid">
+          <div class="card">
+            <h2>Usuários</h2>
+            <form id="userForm" class="inline-form"><input name="username" placeholder="Login" required /><input name="password" type="password" placeholder="Senha" required minlength="6" /><select name="role"><option value="user">User</option><option value="admin">Admin</option></select><button class="btn primary">Adicionar</button></form>
+            <div id="usersList"></div>
+          </div>
+          <div class="card">
+            <h2>Cadastro de BTs</h2>
+            <form id="machineForm" class="inline-form"><input name="code" placeholder="BT-01" required /><input name="description" placeholder="Descrição do maquinário" required /><button class="btn primary">Salvar</button></form>
+            <div id="machinesList"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="recordDialog"><div class="dialog-head"><strong>BDT</strong><button id="closeDialog" class="btn ghost">Fechar</button></div><pre id="recordDetail"></pre></dialog>
+  <script src="/app.js"></script>
+</body>
+</html>

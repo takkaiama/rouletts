@@ -1,9 +1,16 @@
 {
-  "name": "roleta-analytics-backend",
-  "version": "1.4.0",
+  "name": "biotec-bdt-online",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": {"prestart":"npm test","start":"node src/server.js","worker":"node src/worker.js","dev":"node --watch src/server.js","test":"node --test test/*.test.js"},
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
   "engines": {"node": ">=22 <25"},
-  "dependencies": {"express":"^4.21.2","pg":"^8.13.3","dotenv":"^16.4.7"}
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pg": "^8.13.3"
+  }
 }
