@@ -75,22 +75,32 @@ function updateSummary(){
 }
 ['hourmeter_initial','hourmeter_final','shift_start','shift_end'].forEach(n=>{const el=$(`[name="${n}"]`);if(el)['input','change','keyup','blur'].forEach(ev=>el.addEventListener(ev,updateSummary))});
 
-let machineTimer;
-$('#machineCode').addEventListener('input',()=>{clearTimeout(machineTimer);$('#machineDescription').value='';const q=$('#machineCode').value.trim();if(!q){$('#machineSuggest').classList.add('hidden');return}machineTimer=setTimeout(()=>searchMachines(q),120)});
-$('#machineCode').addEventListener('blur',()=>setTimeout(()=>{const q=$('#machineCode').value.trim();if(q&&!$('#machineDescription').value)searchMachines(q,true)},120));
-async function searchMachines(q,forceExact=false){try{const {machines}=await api(`/api/machines?q=${encodeURIComponent(q)}`);const box=$('#machineSuggest');box.innerHTML=machines.map(m=>`<div class="suggestion" data-code="${esc(m.code)}" data-desc="${esc(m.description)}"><strong>${esc(m.code)}</strong>${esc(m.description)}</div>`).join('');box.classList.toggle('hidden',!machines.length);box.querySelectorAll('.suggestion').forEach(x=>x.onclick=()=>selectMachine(x.dataset.code,x.dataset.desc));const exact=machines.find(m=>compact(m.code)===compact(q)||digits(m.code)===digits(q));if(exact)selectMachine(exact.code,exact.description,false);else if(forceExact)$('#machineDescription').value=''}catch{}}
-function compact(v){return String(v).toUpperCase().replace(/[^A-Z0-9]/g,'')}
-function digits(v){const d=String(v).replace(/\D/g,'').replace(/^0+/,'');return d||'0'}
-function selectMachine(code,desc,hide=true){$('#machineCode').value=code;$('#machineDescription').value=desc;if(hide)$('#machineSuggest').classList.add('hidden')}
-document.addEventListener('click',e=>{if(!e.target.closest('.machine-field'))$('#machineSuggest').classList.add('hidden')});
+function populateMachineSelect(machines=[]){
+  const sel=$('#machineCode');
+  if(!sel)return;
+  const current=sel.value;
+  sel.innerHTML='<option value="">Selecione o BT</option>'+machines.map(m=>`<option value="${esc(m.code)}" data-desc="${esc(m.description)}">${esc(m.code)} — ${esc(m.description)}</option>`).join('');
+  if([...sel.options].some(o=>o.value===current)) sel.value=current;
+  updateMachineDescription();
+}
+function updateMachineDescription(){
+  const sel=$('#machineCode');
+  const opt=sel?.selectedOptions?.[0];
+  $('#machineDescription').value=opt?.dataset?.desc||'';
+}
+$('#machineCode').addEventListener('change',updateMachineDescription);
 
 async function loadCatalogs(){
   if(!currentUser)return;
   try{
     catalogs=await api('/api/catalogs');
-    $('#farmList').innerHTML=(catalogs.farms||[]).map(v=>`<option value="${esc(v)}"></option>`).join('');
+    const farm=$('#farmSelect');
+    const currentFarm=farm.value;
+    farm.innerHTML='<option value="">Selecione a fazenda</option>'+(catalogs.farms||[]).map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');
+    if([...farm.options].some(o=>o.value===currentFarm)) farm.value=currentFarm;
     $('#operatorList').innerHTML=(catalogs.operators||[]).map(o=>`<option value="${esc(o.name)}">${esc(o.employee_id||'')}</option>`).join('');
-  }catch{}
+    populateMachineSelect(catalogs.machines||[]);
+  }catch(err){toast(err.message,true)}
 }
 $('[name="operator_name"]').addEventListener('change',()=>{const v=$('[name="operator_name"]').value.trim().toLowerCase();const o=(catalogs.operators||[]).find(x=>String(x.name).toLowerCase()===v);if(o&&o.employee_id)$('[name="employee_id"]').value=o.employee_id});
 

@@ -77,4 +77,17 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_bdt_records_machine ON bdt_records(machine_code);
     CREATE INDEX IF NOT EXISTS idx_bdt_records_creator ON bdt_records(created_by);
   `);
+
+  const machines = [
+    ['BT-01','PICADOR'],['BT-18','PICADOR'],['BT-42','PICADOR'],
+    ['BT-02','PC'],['BT-10','PC'],['BT-17','PC'],
+    ['BT-06','SKIDER'],['BT-14','SKIDER'],['BT-34','SKIDER'],
+    ['BT-15','FELLER'],['BT-24','FELLER'],['BT-41','FELLER'],
+    ['BT-0001','PICADOR ALUGADO'],['BT-320','PC ALUGADA'],
+    ['BT-0002','PICADOR ALUGADO BIOMATA'],['BT-04','PICADOR ALUGADO']
+  ];
+  for (const [code, description] of machines) {
+    await pool.query(`INSERT INTO bdt_machines(code,description,active) VALUES($1,$2,true)
+      ON CONFLICT(code) DO UPDATE SET description=EXCLUDED.description, active=true, updated_at=NOW()`, [code,description]);
+  }
 }

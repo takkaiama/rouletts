@@ -74,6 +74,7 @@ function minutesBetween(start, end) {
 function fmtDecimal(n) { return n == null || !Number.isFinite(n) ? '' : Number(n.toFixed(2)).toString().replace('.',','); }
 function fmtHoursMinutes(min) { return min == null || !Number.isFinite(min) ? '' : (min/60).toFixed(2).replace('.',','); }
 const maintenanceCodes = new Set(['02','05','06','07','11','12','20','21','22']);
+const baseFarms = ['ALDEIA','BOA ESPERANÇA','CANEL','CARACOL','CATINGUEIRA','CATINGUEIRO','COLINA VERDE','EXTREMA','FRANGO NATO','IPÊ','JUSSARA','LIVRAMENTO','MAIOBA','MELINA','PROGRESSO','SANTIAGO','SINOBRAS','TUPACIGUARA'];
 function calculateRecord(body) {
   const hi = parseNumber(body.hourmeter_initial), hf = parseNumber(body.hourmeter_final);
   if (hi == null || hf == null || hf < hi) throw Object.assign(new Error('Horímetros inválidos. O final deve ser maior ou igual ao inicial.'), { status: 400 });
@@ -167,11 +168,14 @@ app.get('/api/machines', auth, async (req, res) => {
 });
 
 app.get('/api/catalogs', auth, async (_req, res) => {
-  const [farms, operators] = await Promise.all([
-    pool.query(`SELECT farm FROM (SELECT farm, MAX(id) last_id FROM bdt_records WHERE trim(farm)<>'' GROUP BY farm) x ORDER BY last_id DESC LIMIT 300`),
-    pool.query(`SELECT DISTINCT ON (lower(operator_name)) operator_name AS name, employee_id FROM bdt_records WHERE trim(operator_name)<>'' ORDER BY lower(operator_name), id DESC`)
+  const [farms, operators, machines] = await Promise.all([
+    pool.query(`SELECT DISTINCT farm FROM bdt_records WHERE trim(farm)<>'' ORDER BY farm`),
+    pool.query(`SELECT DISTINCT ON (lower(operator_name)) operator_name AS name, employee_id FROM bdt_records WHERE trim(operator_name)<>'' ORDER BY lower(operator_name), id DESC`),
+    pool.query(`SELECT code,description FROM bdt_machines WHERE active=true ORDER BY code`)
   ]);
-  res.json({ farms: farms.rows.map(r=>r.farm), operators: operators.rows });
+  const farmSet = new Set(baseFarms);
+  for (const r of farms.rows) farmSet.add(r.farm);
+  res.json({ farms: [...farmSet].sort((a,b)=>a.localeCompare(b,'pt-BR')), operators: operators.rows, machines: machines.rows });
 });
 app.get('/api/machines/all', auth, adminOnly, async (_req, res) => {
   const { rows } = await pool.query('SELECT id, code, description, active FROM bdt_machines ORDER BY code');
