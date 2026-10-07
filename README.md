@@ -1,4 +1,4 @@
-# Biotec BDT Online v1.3.0
+# Biotec BDT Online v1.4.0
 
 Atualização com catálogo oficial extraído da base operacional enviada.
 

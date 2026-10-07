@@ -113,11 +113,47 @@ async function viewRecord(id){try{const {record}=await api(`/api/records/${id}`)
 async function deleteRecord(id){if(!confirm(`Excluir BDT #${id}?`))return;try{await api(`/api/records/${id}`,{method:'DELETE'});toast('Registro excluído.');await Promise.all([loadRecords(),loadCatalogs()])}catch(err){toast(err.message,true)}}
 $('#closeDialog').onclick=()=>$('#recordDialog').close();
 
-async function loadAdmin(){if(currentUser?.role!=='admin')return;try{const [{users},{machines}]=await Promise.all([api('/api/users'),api('/api/machines/all')]);$('#usersList').innerHTML=users.map(u=>`<div class="list-row"><strong>${esc(u.username)}</strong><select data-user-role="${u.id}"><option value="user" ${u.role==='user'?'selected':''}>User</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select><label><input type="checkbox" data-user-active="${u.id}" ${u.active?'checked':''}> Ativo</label><button class="btn secondary save-user" data-id="${u.id}">Salvar</button></div>`).join('');$$('.save-user').forEach(b=>b.onclick=()=>saveUser(b.dataset.id));$('#machinesList').innerHTML=machines.map(m=>`<div class="list-row machine-row"><strong>${esc(m.code)}</strong><span>${esc(m.description)}</span><button class="btn ghost danger del-machine" data-id="${m.id}">Desativar</button></div>`).join('');$$('.del-machine').forEach(b=>b.onclick=()=>delMachine(b.dataset.id));}catch(err){toast(err.message,true)}}
+async function loadAdmin(){
+  if(currentUser?.role!=='admin')return;
+  try{
+    const [{users},{machines},{farms}]=await Promise.all([api('/api/users'),api('/api/machines/all'),api('/api/farms/all')]);
+    $('#usersList').innerHTML=users.map(u=>`<div class="list-row"><strong>${esc(u.username)}</strong><select data-user-role="${u.id}"><option value="user" ${u.role==='user'?'selected':''}>User</option><option value="admin" ${u.role==='admin'?'selected':''}>Admin</option></select><label><input type="checkbox" data-user-active="${u.id}" ${u.active?'checked':''}> Ativo</label><button class="btn secondary save-user" data-id="${u.id}">Salvar</button></div>`).join('');
+    $$('.save-user').forEach(b=>b.onclick=()=>saveUser(b.dataset.id));
+
+    $('#machinesList').innerHTML=machines.map(m=>`<div class="catalog-row ${m.active?'':'inactive'}"><input data-machine-code="${m.id}" value="${esc(m.code)}"><input data-machine-desc="${m.id}" value="${esc(m.description)}"><label class="active-check"><input type="checkbox" data-machine-active="${m.id}" ${m.active?'checked':''}> Ativo</label><button class="btn secondary save-machine" data-id="${m.id}">Salvar</button><button class="btn ghost danger delete-machine" data-id="${m.id}">Excluir</button></div>`).join('');
+    $$('.save-machine').forEach(b=>b.onclick=()=>saveMachine(b.dataset.id));
+    $$('.delete-machine').forEach(b=>b.onclick=()=>deleteMachine(b.dataset.id));
+
+    $('#farmsList').innerHTML=farms.map(f=>`<div class="catalog-row farm-row ${f.active?'':'inactive'}"><input data-farm-name="${f.id}" value="${esc(f.name)}"><label class="active-check"><input type="checkbox" data-farm-active="${f.id}" ${f.active?'checked':''}> Ativa</label><button class="btn secondary save-farm" data-id="${f.id}">Salvar</button><button class="btn ghost danger delete-farm" data-id="${f.id}">Excluir</button></div>`).join('');
+    $$('.save-farm').forEach(b=>b.onclick=()=>saveFarm(b.dataset.id));
+    $$('.delete-farm').forEach(b=>b.onclick=()=>deleteFarm(b.dataset.id));
+  }catch(err){toast(err.message,true)}
+}
 $('#userForm').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));try{await api('/api/users',{method:'POST',body:JSON.stringify(d)});e.currentTarget.reset();toast('Usuário criado.');loadAdmin()}catch(err){toast(err.message,true)}});
 async function saveUser(id){const role=$(`[data-user-role="${id}"]`).value,active=$(`[data-user-active="${id}"]`).checked;try{await api(`/api/users/${id}`,{method:'PATCH',body:JSON.stringify({role,active})});toast('Usuário atualizado.');loadAdmin()}catch(err){toast(err.message,true)}}
-$('#machineForm').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));try{await api('/api/machines',{method:'POST',body:JSON.stringify(d)});e.currentTarget.reset();toast('BT salvo.');await Promise.all([loadAdmin(),loadCatalogs()])}catch(err){toast(err.message,true)}});
-async function delMachine(id){try{await api(`/api/machines/${id}`,{method:'DELETE'});toast('BT desativado.');loadAdmin()}catch(err){toast(err.message,true)}}
+
+$('#machineForm').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));try{await api('/api/machines',{method:'POST',body:JSON.stringify(d)});e.currentTarget.reset();toast('BT adicionado.');await Promise.all([loadAdmin(),loadCatalogs()])}catch(err){toast(err.message,true)}});
+async function saveMachine(id){
+  const code=$(`[data-machine-code="${id}"]`).value;
+  const description=$(`[data-machine-desc="${id}"]`).value;
+  const active=$(`[data-machine-active="${id}"]`).checked;
+  try{await api(`/api/machines/${id}`,{method:'PATCH',body:JSON.stringify({code,description,active})});toast(active?'BT atualizado.':'BT desativado e removido da lista.');await Promise.all([loadAdmin(),loadCatalogs()])}catch(err){toast(err.message,true)}
+}
+async function deleteMachine(id){
+  if(!confirm('Excluir este BT do cadastro? Os BDTs já salvos não serão apagados.'))return;
+  try{await api(`/api/machines/${id}`,{method:'DELETE'});toast('BT excluído do cadastro.');await Promise.all([loadAdmin(),loadCatalogs()])}catch(err){toast(err.message,true)}
+}
+
+$('#farmForm').addEventListener('submit',async e=>{e.preventDefault();const d=Object.fromEntries(new FormData(e.currentTarget));try{await api('/api/farms',{method:'POST',body:JSON.stringify(d)});e.currentTarget.reset();toast('Fazenda adicionada.');await Promise.all([loadAdmin(),loadCatalogs()])}catch(err){toast(err.message,true)}});
+async function saveFarm(id){
+  const name=$(`[data-farm-name="${id}"]`).value;
+  const active=$(`[data-farm-active="${id}"]`).checked;
+  try{await api(`/api/farms/${id}`,{method:'PATCH',body:JSON.stringify({name,active})});toast(active?'Fazenda atualizada.':'Fazenda desativada e removida da lista.');await Promise.all([loadAdmin(),loadCatalogs()])}catch(err){toast(err.message,true)}
+}
+async function deleteFarm(id){
+  if(!confirm('Excluir esta fazenda do cadastro? Os BDTs já salvos não serão apagados.'))return;
+  try{await api(`/api/farms/${id}`,{method:'DELETE'});toast('Fazenda excluída do cadastro.');await Promise.all([loadAdmin(),loadCatalogs()])}catch(err){toast(err.message,true)}
+}
 
 setInterval(updateSummary,1000);
 boot();

@@ -34,6 +34,15 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
 
+
+    CREATE TABLE IF NOT EXISTS bdt_farms (
+      id BIGSERIAL PRIMARY KEY,
+      name VARCHAR(180) UNIQUE NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS bdt_records (
       id BIGSERIAL PRIMARY KEY,
       work_date VARCHAR(20) NOT NULL,
@@ -78,16 +87,27 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_bdt_records_creator ON bdt_records(created_by);
   `);
 
-  const machines = [
-    ['BT-01','PICADOR'],['BT-18','PICADOR'],['BT-42','PICADOR'],
-    ['BT-02','PC'],['BT-10','PC'],['BT-17','PC'],
-    ['BT-06','SKIDER'],['BT-14','SKIDER'],['BT-34','SKIDER'],
-    ['BT-15','FELLER'],['BT-24','FELLER'],['BT-41','FELLER'],
-    ['BT-0001','PICADOR ALUGADO'],['BT-320','PC ALUGADA'],
-    ['BT-0002','PICADOR ALUGADO BIOMATA'],['BT-04','PICADOR ALUGADO']
-  ];
-  for (const [code, description] of machines) {
-    await pool.query(`INSERT INTO bdt_machines(code,description,active) VALUES($1,$2,true)
-      ON CONFLICT(code) DO UPDATE SET description=EXCLUDED.description, active=true, updated_at=NOW()`, [code,description]);
+  const machineCount = await pool.query('SELECT COUNT(*)::int AS count FROM bdt_machines');
+  if (machineCount.rows[0].count === 0) {
+    const machines = [
+      ['BT-01','PICADOR'],['BT-18','PICADOR'],['BT-42','PICADOR'],
+      ['BT-02','PC'],['BT-10','PC'],['BT-17','PC'],
+      ['BT-06','SKIDER'],['BT-14','SKIDER'],['BT-34','SKIDER'],
+      ['BT-15','FELLER'],['BT-24','FELLER'],['BT-41','FELLER'],
+      ['BT-0001','PICADOR ALUGADO'],['BT-320','PC ALUGADA'],
+      ['BT-0002','PICADOR ALUGADO BIOMATA'],['BT-04','PICADOR ALUGADO']
+    ];
+    for (const [code, description] of machines) {
+      await pool.query('INSERT INTO bdt_machines(code,description,active) VALUES($1,$2,true)', [code,description]);
+    }
   }
+
+  const farmCount = await pool.query('SELECT COUNT(*)::int AS count FROM bdt_farms');
+  if (farmCount.rows[0].count === 0) {
+    const farms = ['ALDEIA','BOA ESPERANÇA','CANEL','CARACOL','CATINGUEIRA','CATINGUEIRO','COLINA VERDE','EXTREMA','FRANGO NATO','IPÊ','JUSSARA','LIVRAMENTO','MAIOBA','MELINA','PROGRESSO','SANTIAGO','SINOBRAS','TUPACIGUARA'];
+    for (const name of farms) {
+      await pool.query('INSERT INTO bdt_farms(name,active) VALUES($1,true)', [name]);
+    }
+  }
+
 }

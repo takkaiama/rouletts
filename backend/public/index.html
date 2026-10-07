@@ -26,7 +26,7 @@
     <header class="topbar">
       <div>
         <div class="brand small">Biotec</div>
-        <div class="subtitle">BDT - Boletim Diário de Trabalho · v1.3.0</div>
+        <div class="subtitle">BDT - Boletim Diário de Trabalho · v1.4.0</div>
       </div>
       <div class="userbox"><span id="currentUser"></span><span id="currentRole" class="badge"></span><button id="logoutBtn" class="btn ghost">Sair</button></div>
     </header>
@@ -104,8 +104,13 @@
           </div>
           <div class="card">
             <h2>Cadastro de BTs</h2>
-            <form id="machineForm" class="inline-form"><input name="code" placeholder="BT-01" required /><input name="description" placeholder="Descrição do maquinário" required /><button class="btn primary">Salvar</button></form>
+            <form id="machineForm" class="inline-form"><input name="code" placeholder="BT-01" required /><input name="description" placeholder="Descrição do maquinário" required /><button class="btn primary">Adicionar</button></form>
             <div id="machinesList"></div>
+          </div>
+          <div class="card">
+            <h2>Fazendas</h2>
+            <form id="farmForm" class="inline-form"><input name="name" placeholder="Nome da fazenda" required /><button class="btn primary">Adicionar</button></form>
+            <div id="farmsList"></div>
           </div>
         </div>
       </section>
@@ -113,6 +118,6 @@
   </div>
 
   <dialog id="recordDialog"><div class="dialog-head"><strong>BDT</strong><button id="closeDialog" class="btn ghost">Fechar</button></div><pre id="recordDetail"></pre></dialog>
-  <script src="/app.js?v=1.3.0"></script>
+  <script src="/app.js?v=1.4.0"></script>
 </body>
 </html>

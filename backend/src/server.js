@@ -74,7 +74,6 @@ function minutesBetween(start, end) {
 function fmtDecimal(n) { return n == null || !Number.isFinite(n) ? '' : Number(n.toFixed(2)).toString().replace('.',','); }
 function fmtHoursMinutes(min) { return min == null || !Number.isFinite(min) ? '' : (min/60).toFixed(2).replace('.',','); }
 const maintenanceCodes = new Set(['02','05','06','07','11','12','20','21','22']);
-const baseFarms = ['ALDEIA','BOA ESPERANÇA','CANEL','CARACOL','CATINGUEIRA','CATINGUEIRO','COLINA VERDE','EXTREMA','FRANGO NATO','IPÊ','JUSSARA','LIVRAMENTO','MAIOBA','MELINA','PROGRESSO','SANTIAGO','SINOBRAS','TUPACIGUARA'];
 function calculateRecord(body) {
   const hi = parseNumber(body.hourmeter_initial), hf = parseNumber(body.hourmeter_final);
   if (hi == null || hf == null || hf < hi) throw Object.assign(new Error('Horímetros inválidos. O final deve ser maior ou igual ao inicial.'), { status: 400 });
@@ -169,14 +168,40 @@ app.get('/api/machines', auth, async (req, res) => {
 
 app.get('/api/catalogs', auth, async (_req, res) => {
   const [farms, operators, machines] = await Promise.all([
-    pool.query(`SELECT DISTINCT farm FROM bdt_records WHERE trim(farm)<>'' ORDER BY farm`),
+    pool.query(`SELECT name FROM bdt_farms WHERE active=true ORDER BY name`),
     pool.query(`SELECT DISTINCT ON (lower(operator_name)) operator_name AS name, employee_id FROM bdt_records WHERE trim(operator_name)<>'' ORDER BY lower(operator_name), id DESC`),
     pool.query(`SELECT code,description FROM bdt_machines WHERE active=true ORDER BY code`)
   ]);
-  const farmSet = new Set(baseFarms);
-  for (const r of farms.rows) farmSet.add(r.farm);
-  res.json({ farms: [...farmSet].sort((a,b)=>a.localeCompare(b,'pt-BR')), operators: operators.rows, machines: machines.rows });
+  res.json({ farms: farms.rows.map(r=>r.name), operators: operators.rows, machines: machines.rows });
 });
+
+app.get('/api/farms/all', auth, adminOnly, async (_req, res) => {
+  const { rows } = await pool.query('SELECT id,name,active FROM bdt_farms ORDER BY name');
+  res.json({ farms: rows });
+});
+app.post('/api/farms', auth, adminOnly, async (req, res) => {
+  const name = cleanText(req.body.name, 180).toUpperCase();
+  if (!name) return res.status(400).json({ error: 'Informe o nome da fazenda.' });
+  const { rows } = await pool.query(`INSERT INTO bdt_farms(name,active) VALUES($1,true)
+    ON CONFLICT(name) DO UPDATE SET active=true, updated_at=NOW()
+    RETURNING id,name,active`, [name]);
+  res.json({ farm: rows[0] });
+});
+app.patch('/api/farms/:id', auth, adminOnly, async (req, res) => {
+  const name = cleanText(req.body.name, 180).toUpperCase();
+  const active = req.body.active !== false;
+  if (!name) return res.status(400).json({ error: 'Informe o nome da fazenda.' });
+  try {
+    const { rows } = await pool.query('UPDATE bdt_farms SET name=$1,active=$2,updated_at=NOW() WHERE id=$3 RETURNING id,name,active', [name,active,req.params.id]);
+    if (!rows[0]) return res.status(404).json({error:'Fazenda não encontrada.'});
+    res.json({farm:rows[0]});
+  } catch(e) { if(e.code==='23505') return res.status(409).json({error:'Já existe uma fazenda com esse nome.'}); throw e; }
+});
+app.delete('/api/farms/:id', auth, adminOnly, async (req, res) => {
+  await pool.query('DELETE FROM bdt_farms WHERE id=$1', [req.params.id]);
+  res.json({ok:true});
+});
+
 app.get('/api/machines/all', auth, adminOnly, async (_req, res) => {
   const { rows } = await pool.query('SELECT id, code, description, active FROM bdt_machines ORDER BY code');
   res.json({ machines: rows });
@@ -189,8 +214,20 @@ app.post('/api/machines', auth, adminOnly, async (req, res) => {
     RETURNING id,code,description,active`, [code, description]);
   res.json({ machine: rows[0] });
 });
+app.patch('/api/machines/:id', auth, adminOnly, async (req, res) => {
+  const code = normalizeCode(req.body.code);
+  const description = cleanText(req.body.description, 180);
+  const active = req.body.active !== false;
+  if (!code || !description) return res.status(400).json({ error: 'Informe BT e descrição.' });
+  try {
+    const { rows } = await pool.query('UPDATE bdt_machines SET code=$1,description=$2,active=$3,updated_at=NOW() WHERE id=$4 RETURNING id,code,description,active', [code,description,active,req.params.id]);
+    if (!rows[0]) return res.status(404).json({error:'BT não encontrado.'});
+    res.json({machine:rows[0]});
+  } catch(e) { if(e.code==='23505') return res.status(409).json({error:'Já existe um BT com esse código.'}); throw e; }
+});
 app.delete('/api/machines/:id', auth, adminOnly, async (req, res) => {
-  await pool.query('UPDATE bdt_machines SET active=false, updated_at=NOW() WHERE id=$1', [req.params.id]); res.json({ ok: true });
+  await pool.query('DELETE FROM bdt_machines WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
 });
 
 app.get('/api/users', auth, adminOnly, async (_req, res) => {
