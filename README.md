@@ -1,25 +1,20 @@
-# Biotec BDT Online
+# Biotec BDT Online v1.2.0
 
-Sistema online para preenchimento e armazenamento do BDT - Boletim Diário de Trabalho / Baldeio.
+Formulário online do Boletim Diário de Trabalho - Baldeio.
 
-## Recursos
-- Login e senha com perfis `admin` e `user`.
-- Primeiro acesso cria o administrador.
-- Formulário BDT baseado no modelo operacional da Biotec.
-- Pesquisa de BT e preenchimento automático da descrição do maquinário.
-- Controle de viagens e paradas/intervenções.
-- Histórico de BDTs.
-- Administração de usuários e cadastro de BTs.
-- PostgreSQL/Neon via `DATABASE_URL`.
+## v1.2.0
+- cálculos automáticos reforçados no navegador e recalculados no servidor;
+- horas de horímetro = final - inicial;
+- tempo de ciclo e tempo de parada automáticos;
+- resumo da operação automático;
+- BT pesquisado também no histórico de BDTs;
+- fazendas e operadores sugeridos a partir do histórico;
+- matrícula recuperada ao selecionar operador conhecido;
+- correção de cache para o Render/Chrome não manter JavaScript antigo.
 
 ## Render
 Root Directory: `backend`
 Build Command: `npm install`
 Start Command: `npm start`
 
-Variáveis:
-- `DATABASE_URL` (obrigatória)
-- `SESSION_SECRET` (recomendada)
-- `NODE_ENV=production`
-
-No primeiro acesso, o sistema solicita a criação do usuário administrador.
+Variáveis necessárias: `DATABASE_URL`, `SESSION_SECRET`, `NODE_ENV=production`.
